@@ -1,9 +1,12 @@
-.PHONY: infra-up infra-down infra-logs infra-clean infra-restart init-env status
+.PHONY: infra-up infra-down infra-logs infra-clean infra-restart status \
+        venv install run lint format check
 
 COMPOSE_FILE = docker-compose.infra.yml
 
+# INFRASTRUCTURE
+
 init-env:
-	@if [ ! -f .env ]; then cp .env.example .env; echo ".env created, update passwords if needed"; else echo ".env already exists"; fi
+	@if [ ! -f .env ]; then cp .env.example .env; fi
 
 infra-up: init-env
 	docker compose -f $(COMPOSE_FILE) up -d --wait
@@ -23,3 +26,28 @@ infra-clean:
 
 status:
 	docker compose -f $(COMPOSE_FILE) ps
+
+# PYTHON ENV
+
+venv:
+	python3.11 -m venv .venv
+
+install: venv
+	.venv/bin/pip install --upgrade pip
+	.venv/bin/pip install -r requirements.txt
+
+# RUN
+
+run:
+	.venv/bin/python src/main.py
+
+# CODE QUALITY
+
+lint:
+	.venv/bin/ruff check src/
+
+format:
+	.venv/bin/ruff format src/
+
+check: lint
+	.venv/bin/mypy src/
