@@ -1,10 +1,13 @@
 import sys
+import asyncio
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import settings
 from src.core import setup_logger, get_logger
+from src.scanner import walk_directory
+from src.services import start_background_scanner
 from src.infrastructure import (
     init_database,
     check_database_connection,
@@ -84,6 +87,19 @@ def main() -> int:
     except Exception as e:
         logger.error("Critical error connecting to Spark", error=str(e), error_type=type(e).__name__,)
         return 1
+    
+    # SCAN
+    try:
+        asyncio.run(
+            start_background_scanner(
+                redis_client=redis_client,
+                kafka_producer=kafka_producer,
+                topic=settings.KAFKA_TOPIC_RAW_FILES,
+                root_path=settings.SCAN_ROOT_PATH,
+            )
+        )
+    except Exception as e:
+        logger.error("Error in background scanner", error=str(e), error_type=type(e).__name__)
 
     logger.info("The application is ready to work!", message="Waiting for tasks...")
 

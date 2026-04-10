@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # SCANNER
     SCAN_ROOT_PATH: str
     SCAN_MAX_FILE_SIZE_MB: int
+    SCAN_SUPPORTED_EXTENSIONS: list[str] = [
+        ".txt", ".pdf", ".docx", ".xlsx", ".csv", ".json", ".html",
+        ".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".tmp"
+    ]
 
 
 settings = Settings()
