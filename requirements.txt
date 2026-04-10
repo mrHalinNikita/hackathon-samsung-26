@@ -7,6 +7,9 @@ python-dotenv>=1.0.1
 psycopg>=3.1.18
 sqlalchemy>=2.0.29
 
+# Cache / Broker
+redis>=5.0.3
+
 # Dev
 black>=24.2.0
 ruff>=0.3.0
