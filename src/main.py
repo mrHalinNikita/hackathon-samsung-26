@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import settings
 from src.core import setup_logger, get_logger
+from src.infrastructure import init_database, check_database_connection
 
 logger = get_logger("main")
 
@@ -21,11 +22,13 @@ def main() -> int:
         scan_root=settings.SCAN_ROOT_PATH,
     )
 
-    logger.debug(
-        "Configuration loaded",
-        postgres_host=settings.POSTGRES_HOST,
-        kafka_bootstrap=settings.kafka_bootstrap_servers,
-    )
+    try:
+        db_engine = init_database(settings.database_url)
+        check_database_connection(db_engine)
+        logger.debug("Database engine init")
+    except Exception as e:
+        logger.error("Error connecting to the database", error=str(e), error_type=type(e).__name__,)
+        return 1
 
     logger.info("The application is ready to work!", message="Waiting for tasks...")
 
@@ -33,6 +36,9 @@ def main() -> int:
         input("Press Enter to stop the application....\n")
     except KeyboardInterrupt:
         logger.info("Interrupt signal received (Ctrl+C)")
+
+    if db_engine:
+        db_engine.dispose()
 
     logger.info("Stopping the application")
 

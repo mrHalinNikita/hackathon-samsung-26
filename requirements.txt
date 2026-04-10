@@ -1,6 +1,13 @@
+# Core
 pydantic-settings>=2.2.0
 structlog>=24.1.0
 python-dotenv>=1.0.1
+
+# Database
+psycopg>=3.1.18
+sqlalchemy>=2.0.29
+
+# Dev
 black>=24.2.0
 ruff>=0.3.0
 mypy>=1.8.0
