@@ -69,6 +69,50 @@ services:
     networks:
       - pd_network
 
+  # SPARK MASTER
+  spark-master:
+    image: apache/spark:3.5.0
+    container_name: pd_spark_master
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    environment:
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep '[o]rg.apache.spark.deploy.master.Master' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - pd_network
+
+  # SPARK WORKER
+  spark-worker:
+    image: apache/spark:3.5.0
+    container_name: pd_spark_worker
+    restart: unless-stopped
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    environment:
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_WEBUI_PORT=8081
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep '[o]rg.apache.spark.deploy.worker.Worker' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - pd_network
+
 volumes:
   pg_data:
   redis_data:
