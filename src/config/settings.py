@@ -59,5 +59,11 @@ class Settings(BaseSettings):
         ".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".tmp"
     ]
 
+    # OCR SERVICE
+    OCR_SERVICE_HOST: str
+    OCR_PORT: int
+    OCR_TESSERACT_LANGS: str
+    OCR_MAX_IMAGE_SIZE_MB: int
+
 
 settings = Settings()

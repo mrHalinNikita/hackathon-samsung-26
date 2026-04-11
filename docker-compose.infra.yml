@@ -113,10 +113,81 @@ services:
     networks:
       - pd_network
 
+  # OCR SERVICE
+  ocr-service:
+    build:
+      context: .
+      dockerfile: deploy/docker/ocr-service/Dockerfile
+    container_name: pd_ocr_service
+    restart: unless-stopped
+    ports:
+      - "${OCR_PORT}:8000"
+    environment:
+      - OCR_HOST=${OCR_HOST}
+      - OCR_PORT=${OCR_PORT}
+      - OCR_LOG_LEVEL=${OCR_LOG_LEVEL}
+      - OCR_REDIS_URL=${OCR_REDIS_URL}
+      - OCR_TESSERACT_LANGS=${OCR_TESSERACT_LANGS}
+      - OCR_TESSERACT_PATH=${OCR_TESSERACT_PATH}
+      - OCR_MAX_IMAGE_SIZE_MB=${OCR_MAX_IMAGE_SIZE_MB}
+      - OCR_MIN_CONFIDENCE=${OCR_MIN_CONFIDENCE}
+      - OCR_CACHE_TTL_SECONDS=${OCR_CACHE_TTL_SECONDS}
+      - OCR_WORKER_CONCURRENCY=${OCR_WORKER_CONCURRENCY}
+    volumes:
+      - ocr_cache:/tmp/ocr_cache
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - pd_network
+
+  # OCR WORKER (Celery)
+  ocr-worker:
+    build:
+      context: .
+      dockerfile: deploy/docker/ocr-service/Dockerfile
+    container_name: pd_ocr_worker
+    restart: unless-stopped
+    environment:
+      - OCR_HOST=${OCR_HOST}
+      - OCR_PORT=${OCR_PORT}
+      - OCR_LOG_LEVEL=${OCR_LOG_LEVEL}
+      - OCR_REDIS_URL=${OCR_REDIS_URL}
+      - OCR_TESSERACT_LANGS=${OCR_TESSERACT_LANGS}
+      - OCR_TESSERACT_PATH=${OCR_TESSERACT_PATH}
+      - OCR_MAX_IMAGE_SIZE_MB=${OCR_MAX_IMAGE_SIZE_MB}
+      - OCR_MIN_CONFIDENCE=${OCR_MIN_CONFIDENCE}
+      - OCR_CACHE_TTL_SECONDS=${OCR_CACHE_TTL_SECONDS}
+      - OCR_WORKER_CONCURRENCY=${OCR_WORKER_CONCURRENCY}
+    volumes:
+      - ocr_cache:/tmp/ocr_cache
+    command: ["celery", "-A", "src.services.ocr.tasks:celery_app", "worker", "--loglevel=info", "--concurrency=${OCR_WORKER_CONCURRENCY}"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "celery -A src.services.ocr.tasks:celery_app inspect ping -d celery@$$HOSTNAME --timeout 5 >/dev/null 2>&1 || exit 1"
+      ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - pd_network
+
 volumes:
   pg_data:
   redis_data:
   kafka_data:
+  ocr_cache:
 
 networks:
   pd_network:

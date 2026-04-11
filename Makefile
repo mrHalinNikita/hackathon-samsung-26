@@ -35,6 +35,7 @@ venv:
 install: venv
 	.venv/bin/pip install --upgrade pip
 	.venv/bin/pip install -r requirements.txt
+	.venv/bin/pip install -r requirements-ocr.txt
 
 # RUN
 
@@ -51,3 +52,19 @@ format:
 
 check: lint
 	.venv/bin/mypy src/
+
+# OCR SERVICE
+
+ocr-up:
+	docker compose -f docker-compose.infra.yml up -d ocr-service ocr-worker
+
+ocr-down:
+	docker compose -f docker-compose.infra.yml down ocr-service ocr-worker
+
+ocr-logs:
+	docker compose -f docker-compose.infra.yml logs -f ocr-service ocr-worker
+
+ocr-test:
+	curl -X POST http://localhost:$(OCR_SERVICE_PORT)/api/v1/ocr/extract \
+	  -H "Content-Type: application/json" \
+	  -d '{"file_path": "./test_dataset/scans/sample.jpg", "preprocess": true}'
