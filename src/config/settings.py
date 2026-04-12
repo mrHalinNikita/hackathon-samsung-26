@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     # SCANNER
     SCAN_ROOT_PATH: str
     SCAN_MAX_FILE_SIZE_MB: int
+    SCAN_SUPPORTED_EXTENSIONS: list[str] = [
+        ".txt", ".pdf", ".docx", ".xlsx", ".csv", ".json", ".html",
+        ".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".tmp"
+    ]
+
+    # OCR SERVICE
+    OCR_HOST: str
+    OCR_PORT: int
+    OCR_TESSERACT_LANGS: str
+    OCR_MAX_IMAGE_SIZE_MB: int
 
 
 settings = Settings()

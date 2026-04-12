@@ -13,6 +13,7 @@ def init_kafka_producer(
     acks: str = "all",
     retries: int = 5,
     compression_type: str = "snappy",
+    max_message_bytes: int = 20_000_000,
 ) -> Producer:
 
     config = {

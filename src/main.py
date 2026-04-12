@@ -1,17 +1,25 @@
 import sys
+import asyncio
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import settings
 from src.core import setup_logger, get_logger
+from src.scanner import walk_directory
+from src.services import start_background_scanner
+from src.consumers import RawFilesConsumer
+from src.spark.job import run_spark_processing
 from src.infrastructure import (
     init_database,
     check_database_connection,
     init_redis,
     check_redis_connection,
+    check_and_mark_processed,
     init_kafka_producer,
     ensure_topics_exist,
+    init_spark_session,
+    check_spark_connection,
 )
 
 logger = get_logger("main")
@@ -70,6 +78,41 @@ def main() -> int:
     except Exception as e:
         logger.error("Critical error connecting to Kafka", error=str(e), error_type=type(e).__name__,)
         return 1
+    
+    # SPARK
+    try:
+        spark = init_spark_session(
+            app_name=settings.APP_NAME,
+            master="local[2]",  # master=f"spark://{settings.SPARK_MASTER_HOST}:7077"
+        )
+        check_spark_connection(spark)
+        logger.debug("Spark session init")
+    except Exception as e:
+        logger.error("Critical error connecting to Spark", error=str(e), error_type=type(e).__name__,)
+        return 1
+
+    # SPARK JOB
+    try:
+        logger.info("Collecting files for Spark processing...")
+        
+        files_to_process = []
+        for file_info in walk_directory(
+            root_path=settings.SCAN_ROOT_PATH,
+            calculate_hash=True
+        ):
+            if check_and_mark_processed(redis_client, file_info.file_hash):
+                continue
+            files_to_process.append(str(file_info.path))
+
+        if not files_to_process:
+            logger.info("No new files to process.")
+        else:
+            logger.info(f"Found {len(files_to_process)} files. Sending to Spark...")
+            
+            run_spark_processing(spark, files_to_process)
+
+    except Exception as e:
+        logger.error("Error in Spark processing", error=str(e))
 
     logger.info("The application is ready to work!", message="Waiting for tasks...")
 
@@ -79,6 +122,8 @@ def main() -> int:
         logger.info("Interrupt signal received (Ctrl+C)")
 
     logger.info("Stopping application, closing connections...")
+    if spark:
+        spark.stop()
     if kafka_producer:
         kafka_producer.flush(timeout=10)
         kafka_producer.close()
