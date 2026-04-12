@@ -1,12 +1,14 @@
 import time
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+import tempfile
+import shutil
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 import structlog
 
 from src.services.ocr.logger import setup_logger, get_logger
 from src.services.ocr.config import settings
-from src.services.ocr.schemas import OCRRequest, OCRResponse, HealthResponse
+from src.services.ocr.schemas import OCRResponse, HealthResponse
 from src.services.ocr.tasks import process_image_task
 from src.services.ocr.ocr_engine import ocr_engine
 
@@ -51,20 +53,40 @@ async def health_check():
 
 
 @app.post("/api/v1/ocr/extract", response_model=OCRResponse, tags=["OCR"])
-async def extract_text(request: OCRRequest):
-
+async def extract_text(
+    file: UploadFile = File(..., description="Image file for OCR"),
+    language: str = Form(default="rus+eng", description="Language code(s) for Tesseract"),
+    preprocess: bool = Form(default=True, description="Apply image preprocessing"),
+):
     start_time = time.time()
     
-    file_path = Path(request.file_path)
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".gif"}
+    file_suffix = Path(file.filename).suffix.lower()
     
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+    if file_suffix not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {file_suffix}. Allowed: {allowed_extensions}"
+        )
     
+    max_size = settings.MAX_IMAGE_SIZE_MB * 1024 * 1024
+    content = await file.read()
+    if len(content) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large: {len(content) / 1024 / 1024:.2f}MB > {settings.MAX_IMAGE_SIZE_MB}MB"
+        )
+    
+    temp_path = None
     try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as tmp:
+            tmp.write(content)
+            temp_path = Path(tmp.name)
+        
         result = ocr_engine.extract_text(
-            image_path=file_path,
-            language=request.language,
-            preprocess=request.preprocess,
+            image_path=temp_path,
+            language=language if language != "rus+eng" else None,
+            preprocess=preprocess,
         )
         
         processing_time = (time.time() - start_time) * 1000
@@ -80,29 +102,48 @@ async def extract_text(request: OCRRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error("OCR extraction failed", path=str(file_path), error=str(e))
+        logger.error("OCR extraction failed", filename=file.filename, error=str(e))
         raise HTTPException(status_code=500, detail="OCR processing failed")
+    finally:
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 @app.post("/api/v1/ocr/extract/async", tags=["OCR"])
-async def extract_text_async(request: OCRRequest, background_tasks: BackgroundTasks):
+async def extract_text_async(file: UploadFile = File(...), language: str = Form(default="rus+eng"), preprocess: bool = Form(default=True),):
 
-    file_path = Path(request.file_path)
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".gif"}
+    file_suffix = Path(file.filename).suffix.lower()
     
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+    if file_suffix not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {file_suffix}"
+        )
     
+    temp_path = None
     try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            temp_path = Path(tmp.name)
+        
         task = process_image_task.delay(
-            file_path=str(file_path),
-            language=request.language,
-            preprocess=request.preprocess,
+            file_path=str(temp_path),
+            language=language if language != "rus+eng" else None,
+            preprocess=preprocess,
         )
         
-        return {"task_id": task.id, "status": "queued"}
+        return {"task_id": task.id, "status": "queued", "filename": file.filename}
         
     except Exception as e:
-        logger.error("Failed to queue OCR task", path=str(file_path), error=str(e))
+        logger.error("Failed to queue OCR task", filename=file.filename, error=str(e))
+
+        if temp_path and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail="Failed to queue task")
 
 
@@ -118,8 +159,18 @@ async def get_task_result(task_id: str):
     elif task_result.state == "STARTED":
         return {"task_id": task_id, "status": "processing"}
     elif task_result.state == "SUCCESS":
+        _cleanup_temp_file(task_result.result.get("temp_path"))
         return {"task_id": task_id, "status": "completed", "result": task_result.result}
     elif task_result.state == "FAILURE":
         return {"task_id": task_id, "status": "failed", "error": str(task_result.result)}
     else:
         return {"task_id": task_id, "status": task_result.state}
+
+
+def _cleanup_temp_file(temp_path: str | None) -> None:
+
+    if temp_path:
+        try:
+            Path(temp_path).unlink(missing_ok=True)
+        except OSError:
+            pass

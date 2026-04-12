@@ -8,6 +8,7 @@ from src.config import settings
 from src.core import setup_logger, get_logger
 from src.scanner import walk_directory
 from src.services import start_background_scanner
+from src.consumers import RawFilesConsumer
 from src.infrastructure import (
     init_database,
     check_database_connection,
@@ -100,6 +101,29 @@ def main() -> int:
         )
     except Exception as e:
         logger.error("Error in background scanner", error=str(e), error_type=type(e).__name__)
+
+    # Kafka Consumer
+    run_consumer = True
+    
+    if run_consumer:
+        try:
+            logger.info(
+                "Starting Kafka consumer",
+                topic=settings.KAFKA_TOPIC_RAW_FILES,
+                group_id="pd-scanner-parser-group",
+                auto_commit=True,
+            )
+            
+            consumer = RawFilesConsumer(
+                kafka_bootstrap=settings.kafka_bootstrap_servers,
+            )
+            
+            processed = consumer.run_sync(max_messages=100)
+            
+            logger.info("Consumer finished", processed=processed)
+            
+        except Exception as e:
+            logger.error("Error in Kafka consumer", error=str(e), error_type=type(e).__name__,)
 
     logger.info("The application is ready to work!", message="Waiting for tasks...")
 

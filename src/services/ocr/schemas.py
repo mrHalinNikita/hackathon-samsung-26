@@ -1,21 +1,5 @@
-from pydantic import BaseModel, Field, field_validator
-from pathlib import Path
+from pydantic import BaseModel, Field
 from typing import Optional
-
-
-class OCRRequest(BaseModel):
-    
-    file_path: str = Field(..., min_length=1)
-    language: Optional[str] = Field(default=None)
-    preprocess: bool = Field(default=True)
-    
-    @field_validator("file_path")
-    @classmethod
-    def validate_path(cls, v: str) -> str:
-        path = Path(v)
-        if not path.suffix.lower() in [".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".gif"]:
-            raise ValueError("Unsupported image format")
-        return v
 
 
 class OCRResponse(BaseModel):

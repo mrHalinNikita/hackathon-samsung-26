@@ -65,6 +65,6 @@ ocr-logs:
 	docker compose -f docker-compose.infra.yml logs -f ocr-service ocr-worker
 
 ocr-test:
-	curl -X POST http://localhost:$(OCR_SERVICE_PORT)/api/v1/ocr/extract \
+	curl -X POST http://localhost:$(OCR_PORT)/api/v1/ocr/extract \
 	  -H "Content-Type: application/json" \
 	  -d '{"file_path": "./test_dataset/scans/sample.jpg", "preprocess": true}'
