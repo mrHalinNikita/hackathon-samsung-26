@@ -9,11 +9,13 @@ from src.core import setup_logger, get_logger
 from src.scanner import walk_directory
 from src.services import start_background_scanner
 from src.consumers import RawFilesConsumer
+from src.spark.job import run_spark_processing
 from src.infrastructure import (
     init_database,
     check_database_connection,
     init_redis,
     check_redis_connection,
+    check_and_mark_processed,
     init_kafka_producer,
     ensure_topics_exist,
     init_spark_session,
@@ -81,49 +83,36 @@ def main() -> int:
     try:
         spark = init_spark_session(
             app_name=settings.APP_NAME,
-            master="local[*]",  # master=f"spark://{settings.SPARK_MASTER_HOST}:7077"
+            master="local[2]",  # master=f"spark://{settings.SPARK_MASTER_HOST}:7077"
         )
         check_spark_connection(spark)
         logger.debug("Spark session init")
     except Exception as e:
         logger.error("Critical error connecting to Spark", error=str(e), error_type=type(e).__name__,)
         return 1
-    
-    # SCAN
-    try:
-        asyncio.run(
-            start_background_scanner(
-                redis_client=redis_client,
-                kafka_producer=kafka_producer,
-                topic=settings.KAFKA_TOPIC_RAW_FILES,
-                root_path=settings.SCAN_ROOT_PATH,
-            )
-        )
-    except Exception as e:
-        logger.error("Error in background scanner", error=str(e), error_type=type(e).__name__)
 
-    # Kafka Consumer
-    run_consumer = True
-    
-    if run_consumer:
-        try:
-            logger.info(
-                "Starting Kafka consumer",
-                topic=settings.KAFKA_TOPIC_RAW_FILES,
-                group_id="pd-scanner-parser-group",
-                auto_commit=True,
-            )
+    # SPARK JOB
+    try:
+        logger.info("Collecting files for Spark processing...")
+        
+        files_to_process = []
+        for file_info in walk_directory(
+            root_path=settings.SCAN_ROOT_PATH,
+            calculate_hash=True
+        ):
+            if check_and_mark_processed(redis_client, file_info.file_hash):
+                continue
+            files_to_process.append(str(file_info.path))
+
+        if not files_to_process:
+            logger.info("No new files to process.")
+        else:
+            logger.info(f"Found {len(files_to_process)} files. Sending to Spark...")
             
-            consumer = RawFilesConsumer(
-                kafka_bootstrap=settings.kafka_bootstrap_servers,
-            )
-            
-            processed = consumer.run_sync(max_messages=100)
-            
-            logger.info("Consumer finished", processed=processed)
-            
-        except Exception as e:
-            logger.error("Error in Kafka consumer", error=str(e), error_type=type(e).__name__,)
+            run_spark_processing(spark, files_to_process)
+
+    except Exception as e:
+        logger.error("Error in Spark processing", error=str(e))
 
     logger.info("The application is ready to work!", message="Waiting for tasks...")
 

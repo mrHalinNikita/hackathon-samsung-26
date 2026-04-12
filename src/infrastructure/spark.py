@@ -8,9 +8,9 @@ logger = structlog.get_logger("spark")
 
 def init_spark_session(
     app_name: str,
-    master: str = "local[*]",
-    driver_memory: str = "2g",
-    executor_memory: str = "2g",
+    master: str = "local[2]",
+    driver_memory: str = "4g",
+    executor_memory: str = "4g",
     executor_cores: int = 2,
 ) -> SparkSession:
     
@@ -29,6 +29,7 @@ def init_spark_session(
         .config("spark.executor.cores", executor_cores) \
         .config("spark.sql.adaptive.enabled", "true") \
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+        .config("spark.python.worker.faulthandler.enabled", "true") \
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
         .config("spark.sql.execution.arrow.pyspark.enabled", "true") \
         .getOrCreate()
