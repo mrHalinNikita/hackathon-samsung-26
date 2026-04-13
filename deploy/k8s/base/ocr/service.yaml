@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pd-ocr-service
+  namespace: pd-scanner
+  labels:
+    app: pd-ocr-service
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: pd-ocr-service
+  type: ClusterIP

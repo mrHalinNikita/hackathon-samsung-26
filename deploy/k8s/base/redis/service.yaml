@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pd-redis
+  namespace: pd-scanner
+  labels:
+    app: pd-redis
+spec:
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  selector:
+    app: pd-redis
+  clusterIP: None

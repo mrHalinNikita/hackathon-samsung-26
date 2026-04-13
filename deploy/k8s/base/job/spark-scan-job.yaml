@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pd-spark-scan-job
+  namespace: pd-scanner
+  labels:
+    app: pd-spark-scan-job
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: pd-spark-scan-job
+    spec:
+      containers:
+        - name: spark-driver
+          image: pd-app:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/jobs/spark_scan.py"]
+          envFrom:
+            - configMapRef:
+                name: pd-app-config
+                optional: true
+          env:
+            - name: SCAN_ROOT_PATH
+              value: "/data/test_dataset"
+          volumeMounts:
+            - name: test-dataset
+              mountPath: /data/test_dataset
+              readOnly: true
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2"
+      volumes:
+        - name: test-dataset
+          hostPath:
+            path: /data/test_dataset
+            type: Directory
+      restartPolicy: Never

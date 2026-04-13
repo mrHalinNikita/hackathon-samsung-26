@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-spark-worker
+  namespace: pd-scanner
+  labels:
+    app: pd-spark-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pd-spark-worker
+  template:
+    metadata:
+      labels:
+        app: pd-spark-worker
+    spec:
+      containers:
+      - name: spark-worker
+        image: apache/spark:3.5.0
+        command:
+          - "/opt/spark/bin/spark-class"
+          - "org.apache.spark.deploy.worker.Worker"
+          - "spark://pd-spark-master:7077"
+        env:
+          - name: SPARK_WORKER_CORES
+            value: "2"
+          - name: SPARK_WORKER_MEMORY
+            value: "2g"
+          - name: SPARK_WORKER_WEBUI_PORT
+            value: "8081"
+          - name: SPARK_WORKER_HOST
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: SPARK_PUBLIC_DNS
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name

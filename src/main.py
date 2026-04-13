@@ -1,6 +1,8 @@
 import sys
 import asyncio
 from pathlib import Path
+import time
+import signal
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -116,10 +118,24 @@ def main() -> int:
 
     logger.info("The application is ready to work!", message="Waiting for tasks...")
 
-    try:
+    '''try:
         input("Press Enter to stop the application....\n")
     except KeyboardInterrupt:
-        logger.info("Interrupt signal received (Ctrl+C)")
+        logger.info("Interrupt signal received (Ctrl+C)")'''
+    
+
+    def _shutdown_handler(signum, frame):
+        logger.info("Received shutdown signal, exiting gracefully...")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _shutdown_handler)
+    signal.signal(signal.SIGINT, _shutdown_handler)
+
+    try:
+        while True:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        sys.exit(0)
 
     logger.info("Stopping application, closing connections...")
     if spark:

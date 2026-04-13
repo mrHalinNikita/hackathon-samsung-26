@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-app
+  namespace: pd-scanner
+  labels:
+    app: pd-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pd-app
+  template:
+    metadata:
+      labels:
+        app: pd-app
+    spec:
+      containers:
+        - name: pd-app
+          image: pd-app:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/main.py"]
+          
+          envFrom:
+            - configMapRef:
+                name: pd-app-config
+                optional: true
+            - secretRef:
+                name: pd-app-secret
+                optional: true
+          
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "print('ok')"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
