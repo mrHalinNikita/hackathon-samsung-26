@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-ocr-service
+  namespace: pd-scanner
+  labels:
+    app: pd-ocr-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pd-ocr-service
+  template:
+    metadata:
+      labels:
+        app: pd-ocr-service
+    spec:
+      containers:
+        - name: ocr-service
+          image: pd-ocr-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: pd-ocr-config
+            - secretRef:
+                name: pd-ocr-secret
+          volumeMounts:
+            - name: ocr-cache
+              mountPath: /tmp/ocr_cache
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: ocr-cache
+          emptyDir: {}

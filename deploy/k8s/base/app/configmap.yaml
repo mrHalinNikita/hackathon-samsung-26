@@ -1,0 +1,45 @@
+apiVersion: v1
+data:
+  APP_ENV: prod
+  APP_NAME: pd-scanner
+  DETECTOR_ENSEMBLE_STRATEGY: weighted
+  DETECTOR_FINAL_MIN_CONFIDENCE: '0.7'
+  DETECTOR_NLP_ENABLED: 'true'
+  DETECTOR_NLP_MIN_CONFIDENCE: '0.6'
+  DETECTOR_REGEX_ENABLED: 'true'
+  DETECTOR_REGEX_MIN_CONFIDENCE: '0.8'
+  KAFKA_BROKER: pd-kafka-0.pd-kafka.pd-scanner.svc.cluster.local
+  KAFKA_PORT: '9092'
+  KAFKA_TOPIC_EXTRACTED_TEXT: extracted_text
+  KAFKA_TOPIC_RAW_FILES: raw_files
+  KAFKA_TOPIC_RESULTS: pd_results
+  LOG_LEVEL: INFO
+  OCR_HOST: pd-ocr-service
+  OCR_LOG_LEVEL: INFO
+  OCR_MAX_IMAGE_SIZE_MB: '50'
+  OCR_MIN_CONFIDENCE: '60'
+  OCR_PORT: '8000'
+  OCR_REDIS_URL: redis://:4J8qZlNCZzAZbFddaoBBr@pd-redis:6379/1
+  OCR_TESSERACT_LANGS: rus+eng
+  POSTGRES_DB: pd_scanner
+  POSTGRES_HOST: pd-postgres
+  POSTGRES_PASSWORD: SOfxwaSDXVWd48hoXR6wr
+  POSTGRES_PORT: '5432'
+  POSTGRES_SSLMODE: disable
+  POSTGRES_USER: scanner
+  REDIS_DB: '0'
+  REDIS_HOST: pd-redis
+  REDIS_PASSWORD: 4J8qZlNCZzAZbFddaoBBr
+  REDIS_PORT: '6379'
+  SPARK_DRIVER_MEMORY: 2g
+  SPARK_EXECUTOR_CORES: '2'
+  SPARK_EXECUTOR_MEMORY: 2g
+  SPARK_MASTER_HOST: pd-spark-master
+  SPARK_MASTER_PORT: '7077'
+  SPARK_UI_PORT: '8080'
+kind: ConfigMap
+metadata:
+  labels:
+    app: pd-app
+  name: pd-app-config
+  namespace: pd-scanner

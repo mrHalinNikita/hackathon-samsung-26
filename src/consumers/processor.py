@@ -5,7 +5,6 @@ from typing import Optional
 
 from src.parsers import ParserFactory, ParsedContent
 from src.infrastructure import init_kafka_producer
-from src.detectors import detect_personal_data
 
 logger = structlog.get_logger("processor")
 

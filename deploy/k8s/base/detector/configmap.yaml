@@ -1,0 +1,14 @@
+apiVersion: v1
+data:
+  DETECTOR_ENSEMBLE_STRATEGY: weighted
+  DETECTOR_FINAL_MIN_CONFIDENCE: '0.7'
+  DETECTOR_NLP_ENABLED: 'true'
+  DETECTOR_NLP_MIN_CONFIDENCE: '0.6'
+  DETECTOR_REGEX_ENABLED: 'true'
+  DETECTOR_REGEX_MIN_CONFIDENCE: '0.8'
+kind: ConfigMap
+metadata:
+  labels:
+    app: pd-detector
+  name: pd-detector-config
+  namespace: pd-scanner

@@ -1,6 +1,7 @@
 import sys
 import os
 import gc
+import time
 from pathlib import Path
 
 os.environ["PYSPARK_PYTHON"] = sys.executable
@@ -13,11 +14,21 @@ import structlog
 
 logger = structlog.get_logger("spark_worker")
 
+_worker_detector = None
+
+def _get_worker_detector():
+    global _worker_detector
+
+    if _worker_detector is None:
+        from src.detectors import EnsembleDetector, default_config
+
+        _worker_detector = EnsembleDetector(default_config)
+        logger.debug("EnsembleDetector (Regex + NLP) initialized for worker")
+    return _worker_detector
 
 def process_file_udf(file_path: str) -> dict:
 
     from src.parsers import ParserFactory
-    from src.detectors import detect_personal_data
     import asyncio
 
     old_stdout, old_stderr = sys.stdout, sys.stderr
@@ -28,6 +39,9 @@ def process_file_udf(file_path: str) -> dict:
         path_obj = Path(file_path)
         if not path_obj.exists():
             return {"status": "error", "path": file_path, "message": "File not found"}
+
+        if path_obj.stat().st_size > 100_000_000:
+            return {"status": "skipped_large", "path": file_path, "message": "File too large"}
 
         parsed_content = None
         try:
@@ -43,22 +57,26 @@ def process_file_udf(file_path: str) -> dict:
         if not parsed_content or not parsed_content.text:
             return {"status": "empty", "path": file_path}
 
-        pd_result = detect_personal_data(parsed_content.text)
+        detector = _get_worker_detector()
+        pd_result = detector.detect(parsed_content.text)
 
         result = {
             "status": "success",
             "path": file_path,
-            "has_pd": pd_result.get("detected", False),
-            "pd_categories": pd_result.get("categories", {}),
+            "has_pd": pd_result.has_sensitive_data,
+            "pd_categories": pd_result.categories,
+            "pd_entity_count": pd_result.entity_count,
+            "pd_processing_ms": pd_result.processing_time_ms,
             "text_length": len(parsed_content.text),
             "snippet": parsed_content.text[:300],
         }
 
-        del parsed_content, pd_result
+        del parsed_content, pd_result, detector
         gc.collect()
-
         return result
 
+    except TimeoutError as e:
+        return {"status": "timeout", "path": file_path, "error": str(e)}
     except Exception as e:
         return {"status": "critical_error", "path": file_path, "error": str(e)[:200]}
     finally:
@@ -81,31 +99,53 @@ def run_spark_processing(spark: SparkSession, file_paths: list[str]):
         end_idx = min(start_idx + BATCH_SIZE, len(file_paths))
         batch = file_paths[start_idx:end_idx]
 
-        logger.info(
-            f"Processing batch {batch_idx + 1}/{total_batches}",
-            batch_size=len(batch),
-            files=[Path(f).name for f in batch[:3]] + (["..."] if len(batch) > 3 else []),
-        )
+        heavy = [f for f in batch if Path(f).stat().st_size > 50_000_000]
+        if heavy:
+            for hf in heavy:
+                all_results.append({"status": "skipped_heavy", "path": hf})
+            batch = [f for f in batch if f not in heavy]
+            if not batch:
+                continue
+
+        logger.info(f"Processing batch {batch_idx + 1}/{total_batches}", batch_size=len(batch))
 
         rdd = spark.sparkContext.parallelize(batch, numSlices=min(MAX_PARALLEL, len(batch)))
         batch_results = rdd.map(process_file_udf).collect()
-
         rdd.unpersist(blocking=True)
 
         all_results.extend(batch_results)
 
         gc.collect()
-
-        import time
         time.sleep(0.5)
 
-    stats = {"success": 0, "parse_error": 0, "pd_found": 0, "critical_error": 0, "empty": 0, "error": 0}
+    stats = {
+        "success": 0, "parse_error": 0, "pd_found": 0, "critical_error": 0, "empty": 0, "error": 0, "skipped": 0
+    }
+    total_entities = 0
+    total_pd_time_ms = 0.0
+
     for res in all_results:
         status = res.get("status", "unknown")
-        stats[status] = stats.get(status, 0) + 1
+        if status.startswith("skipped"):
+            stats["skipped"] += 1
+        else:
+            stats[status] = stats.get(status, 0) + 1
+
         if res.get("has_pd"):
             stats["pd_found"] += 1
-            logger.warning("PD Detected!", path=res["path"], categories=res["pd_categories"])
+            total_entities += res.get("pd_entity_count", 0)
+            total_pd_time_ms += res.get("pd_processing_ms", 0)
+
+            logger.warning(
+                "PD Detected!",
+                path=Path(res["path"]).name,
+                categories=res["pd_categories"],
+                entities=res.get("pd_entity_count", 0),
+                pd_time_ms=res.get("pd_processing_ms", 0)
+            )
+
+    stats["total_entities_found"] = total_entities
+    stats["avg_pd_processing_ms"] = round(total_pd_time_ms / max(1, stats["pd_found"]), 2)
 
     logger.info("Spark Job Finished", stats=stats)
     return all_results

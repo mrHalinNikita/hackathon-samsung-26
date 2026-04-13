@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-spark-master
+  namespace: pd-scanner
+  labels:
+    app: pd-spark-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pd-spark-master
+  template:
+    metadata:
+      labels:
+        app: pd-spark-master
+    spec:
+      containers:
+        - name: spark-master
+          image: apache/spark:3.5.0
+          command:
+            - "/opt/spark/bin/spark-class"
+            - "org.apache.spark.deploy.master.Master"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "7077"
+            - "--webui-port"
+            - "8080"
+          ports:
+            - containerPort: 7077
+              name: spark-master
+            - containerPort: 8080
+              name: spark-ui
+          env:
+            - name: SPARK_MASTER_HOST
+              value: "pd-spark-master"
+            - name: SPARK_MASTER_PORT
+              value: "7077"
+            - name: SPARK_MASTER_WEBUI_PORT
+              value: "8080"
+            - name: SPARK_NO_DAEMONIZE
+              value: "true"
+            - name: SPARK_PUBLIC_DNS
+              value: "pd-spark-master"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "3Gi"
+              cpu: "1500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10

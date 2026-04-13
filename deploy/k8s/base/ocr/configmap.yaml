@@ -1,0 +1,15 @@
+apiVersion: v1
+data:
+  OCR_HOST: pd-ocr-service
+  OCR_LOG_LEVEL: INFO
+  OCR_MAX_IMAGE_SIZE_MB: '50'
+  OCR_MIN_CONFIDENCE: '60'
+  OCR_PORT: '8000'
+  OCR_REDIS_URL: redis://:4J8qZlNCZzAZbFddaoBBr@pd-redis:6379/1
+  OCR_TESSERACT_LANGS: rus+eng
+kind: ConfigMap
+metadata:
+  labels:
+    app: pd-ocr
+  name: pd-ocr-config
+  namespace: pd-scanner

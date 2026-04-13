@@ -1,0 +1,13 @@
+apiVersion: v1
+data:
+  POSTGRES_DB: pd_scanner
+  POSTGRES_HOST: pd-postgres
+  POSTGRES_PORT: '5432'
+  POSTGRES_SSLMODE: disable
+  POSTGRES_USER: scanner
+kind: ConfigMap
+metadata:
+  labels:
+    app: pd-postgres
+  name: pd-postgres-config
+  namespace: pd-scanner
