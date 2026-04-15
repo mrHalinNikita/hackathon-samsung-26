@@ -5,6 +5,7 @@ from src.detectors.base import BaseDetector, PDEntity, DetectionResult
 from src.detectors.config import default_config, DetectionConfig
 from src.detectors.regex_detector import RegexDetector
 from src.detectors.nlp_detector import NLPDetector
+from src.detectors.base import classify_protection_level
 
 
 class EnsembleDetector(BaseDetector):
@@ -51,12 +52,16 @@ class EnsembleDetector(BaseDetector):
         
         processing_time = (time.time() - start_time) * 1000
         
-        return DetectionResult(
+        result = DetectionResult(
             entities=final_entities,
             categories=dict(final_categories),
             processing_time_ms=round(processing_time, 2),
             warnings=all_warnings,
         )
+
+        classify_protection_level(result)
+    
+        return result
     
     def _merge_entities(self, entities: list[PDEntity]) -> list[PDEntity]:
 

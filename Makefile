@@ -5,6 +5,10 @@ COMPOSE_FILE = docker-compose.infra.yml
 
 # INFRASTRUCTURE
 
+# WINDOWS
+# init-env:
+#	@if not exist ".env" copy ".env.example" ".env" >nul
+
 init-env:
 	@if [ ! -f .env ]; then cp .env.example .env; fi
 

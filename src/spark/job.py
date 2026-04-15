@@ -10,6 +10,7 @@ os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from pyspark.sql import SparkSession
+from src.utils.ocr_cleaner import clean_ocr_text
 import structlog
 
 logger = structlog.get_logger("spark_worker")
@@ -30,10 +31,6 @@ def process_file_udf(file_path: str) -> dict:
 
     from src.parsers import ParserFactory
     import asyncio
-
-    old_stdout, old_stderr = sys.stdout, sys.stderr
-    sys.stdout = open(os.devnull, "w")
-    sys.stderr = open(os.devnull, "w")
 
     try:
         path_obj = Path(file_path)
@@ -56,6 +53,17 @@ def process_file_udf(file_path: str) -> dict:
 
         if not parsed_content or not parsed_content.text:
             return {"status": "empty", "path": file_path}
+        
+        #if parsed_content.text:
+        #    logger.debug(f"OCR/Parser text preview for {Path(file_path).name}:", preview=parsed_content.text[:300])
+            
+        #if path_obj.suffix.lower() in ['.jpg', '.jpeg', '.png', '.tiff', '.bmp', '.gif']:
+        #    original_text = parsed_content.text
+        #    cleaned_text = clean_ocr_text(original_text)
+        #    
+        #    logger.debug(f"OCR cleaned: {original_text[:100]}... -> {cleaned_text[:100]}...")
+            
+        #    parsed_content.text = cleaned_text
 
         detector = _get_worker_detector()
         pd_result = detector.detect(parsed_content.text)
@@ -64,6 +72,8 @@ def process_file_udf(file_path: str) -> dict:
             "status": "success",
             "path": file_path,
             "has_pd": pd_result.has_sensitive_data,
+            "protection_level": pd_result.protection_level,
+            "protection_level_reason": pd_result.protection_level_reason,
             "pd_categories": pd_result.categories,
             "pd_entity_count": pd_result.entity_count,
             "pd_processing_ms": pd_result.processing_time_ms,
@@ -79,8 +89,6 @@ def process_file_udf(file_path: str) -> dict:
         return {"status": "timeout", "path": file_path, "error": str(e)}
     except Exception as e:
         return {"status": "critical_error", "path": file_path, "error": str(e)[:200]}
-    finally:
-        sys.stdout, sys.stderr = old_stdout, old_stderr
 
 
 def run_spark_processing(spark: SparkSession, file_paths: list[str]):
@@ -139,6 +147,8 @@ def run_spark_processing(spark: SparkSession, file_paths: list[str]):
             logger.warning(
                 "PD Detected!",
                 path=Path(res["path"]).name,
+                protection_level=res.get("protection_level"),
+                protection_reason=res.get("protection_level_reason"),
                 categories=res["pd_categories"],
                 entities=res.get("pd_entity_count", 0),
                 pd_time_ms=res.get("pd_processing_ms", 0)

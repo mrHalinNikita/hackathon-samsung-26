@@ -11,6 +11,7 @@ from src.core import setup_logger, get_logger
 from src.scanner import walk_directory
 from src.services import start_background_scanner
 from src.consumers import RawFilesConsumer
+from src.utils.csv_report import save_csv_report
 from src.spark.job import run_spark_processing
 from src.infrastructure import (
     init_database,
@@ -111,10 +112,12 @@ def main() -> int:
         else:
             logger.info(f"Found {len(files_to_process)} files. Sending to Spark...")
             
-            run_spark_processing(spark, files_to_process)
+            results = run_spark_processing(spark, files_to_process)
 
     except Exception as e:
         logger.error("Error in Spark processing", error=str(e))
+
+    save_csv_report(results, settings.REPORT_OUTPUT_PATH)
 
     logger.info("The application is ready to work!", message="Waiting for tasks...")
 
