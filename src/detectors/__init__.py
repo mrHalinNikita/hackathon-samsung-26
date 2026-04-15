@@ -19,6 +19,8 @@ def detect_personal_data(text: str, config: DetectionConfig = None, use_ensemble
     
     return {
         "detected": result.has_sensitive_data,
+        "protection_level": result.protection_level,
+        "protection_level_reason": result.protection_level_reason,
         "categories": result.categories,
         "entities": [
             {

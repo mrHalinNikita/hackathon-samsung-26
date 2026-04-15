@@ -9,34 +9,34 @@ class RegexDetector(BaseDetector):
 
     PATTERNS: ClassVar[dict[str, dict]] = {
         "passport": {
-            "pattern": r'\b(?<!\d)(\d{4})[\s\-]?(\d{6})(?!\d)\b',
-            "confidence": 0.95,
-            "context_keywords": ["паспорт", "серия", "номер", "документ", "удостоверение"],
+            "pattern": r'\b(\d{4})[\s\-]?(\d{6})\b',
+            "confidence": 0.75,
+            "context_keywords": ["паспорт", "серия", "номер", "документ", "удостоверение", "issued", "выдан", "passport"],
         },
         "snils": {
-            "pattern": r'\b(?<!\d)(\d{3})[\s\-]?(\d{3})[\s\-]?(\d{3})[\s\-]?(\d{2})(?!\d)\b',
-            "confidence": 0.95,
-            "context_keywords": ["снилс", "страховой", "пенсионный", "номер"],
+            "pattern": r'\b(\d{3})[\s\-]?(\d{3})[\s\-]?(\d{3})[\s\-]?(\d{2})\b',
+            "confidence": 0.75,
+            "context_keywords": ["снилс", "страховой", "пенсионный", "номер", "snils", "индивидуальный"],
         },
         "inn": {
-            "pattern": r'\b(?<!\d)(\d{10}|\d{12})(?!\d)\b',
-            "confidence": 0.85,
-            "context_keywords": ["инн", "налогоплательщик", "налог", "код"],
+            "pattern": r'\b(\d{10})\b|\b(\d{12})\b',
+            "confidence": 0.75,
+            "context_keywords": ["инн", "налогоплательщик", "налог", "код", "inn", "идентификационный"],
         },
         "phone": {
-            "pattern": r'\b(?:\+7|8)[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}\b',
-            "confidence": 0.90,
-            "context_keywords": ["телефон", "тел", "моб", "контакт"],
+            "pattern": r'(\+7|8)[\s\.\-]?\(?\d{3}\)?[\s\.\-]?\d{3}[\s\.\-]?\d{2}[\s\.\-]?\d{2}',
+            "confidence": 0.75,
+            "context_keywords": ["телефон", "тел", "моб", "контакт", "phone", "mobile"],
         },
         "email": {
             "pattern": r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-            "confidence": 0.95,
-            "context_keywords": ["email", "почта", "электронная", "адрес"],
+            "confidence": 0.85,
+            "context_keywords": ["email", "почта", "электронная", "адрес", "mail"],
         },
-        "credit_card": {
-            "pattern": r'\b(?:\d{4}[\s\-]?){3}\d{4}\b',
-            "confidence": 0.80,
-            "context_keywords": ["карта", "card", "оплата", "счет"],
+        "date_of_birth": {
+            "pattern": r'\b(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})\b',
+            "confidence": 0.70,
+            "context_keywords": ["рождения", "родился", "дата", "birth", "born", "род", "родился"],
         },
     }
     

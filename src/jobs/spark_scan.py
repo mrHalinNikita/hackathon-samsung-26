@@ -18,7 +18,7 @@ def main():
 
     spark = SparkSession.builder \
         .appName("pd-scanner-k8s-job-local") \
-        .master("local[2]") \
+        .master("local[1]") \
         .config("spark.driver.memory", os.getenv("SPARK_DRIVER_MEMORY", "1g")) \
         .config("spark.executor.memory", os.getenv("SPARK_EXECUTOR_MEMORY", "1g")) \
         .config("spark.python.worker.memory", os.getenv("SPARK_PYTHON_WORKER_MEMORY", "512m")) \
