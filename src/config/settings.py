@@ -65,5 +65,8 @@ class Settings(BaseSettings):
     OCR_TESSERACT_LANGS: str
     OCR_MAX_IMAGE_SIZE_MB: int
 
+    # RESULT
+    REPORT_OUTPUT_PATH: str
+
 
 settings = Settings()

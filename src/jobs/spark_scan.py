@@ -9,6 +9,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.spark.job import run_spark_processing
 from src.scanner.file_walker import walk_directory
+from src.utils.csv_report import save_csv_report
 
 logger = structlog.get_logger("spark_scan_job")
 
@@ -49,6 +50,9 @@ def main():
         logger.info(f"Found {len(files)} files. Dispatching to Spark...")
 
         results = run_spark_processing(spark, files)
+
+        report_path = os.getenv('REPORT_OUTPUT_PATH', '/app/reports/scan_report.csv')
+        save_csv_report(results, report_path)
 
         success = sum(1 for r in results if r.get("status") == "success")
         pd_found = sum(1 for r in results if r.get("has_pd"))

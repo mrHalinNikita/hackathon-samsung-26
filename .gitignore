@@ -12,3 +12,6 @@ artifacts/
 
 # k8s
 deploy/k8s/base/*/secret.yaml
+
+# result
+reports/
