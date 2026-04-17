@@ -13,6 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from pyspark.sql import SparkSession
 import structlog
 
+from src.config import settings
 from src.detectors.base import DetectionResult, classify_protection_level
 
 logger = structlog.get_logger("spark_worker")
@@ -56,6 +57,29 @@ def _make_partial(file_path: str) -> dict:
     }
 
 
+def _message_limit() -> int:
+    configured = getattr(settings, "CHUNK_MAX_MESSAGES_PER_FILE", 100)
+    return max(10, int(configured))
+
+
+def _normalize_entity_value(value: str) -> str:
+    return " ".join(value.strip().lower().split())
+
+
+def _build_entity_key(entity_type: str, raw_value: str, global_start: int | None) -> tuple:
+    """
+    Формирует ключ дедупликации сущностей между overlap-чанками.
+    """
+
+    window = getattr(settings, "CHUNK_ENTITY_DEDUP_WINDOW_CHARS", 25)
+    if window <= 0:
+        window = 25
+
+    position_bucket = None if global_start is None else int(global_start) // window
+    normalized_value = _normalize_entity_value(raw_value)
+    return entity_type, normalized_value, position_bucket
+
+
 def _merge_partials(left: dict, right: dict) -> dict:
     merged = _make_partial(left.get("path") or right.get("path"))
 
@@ -73,11 +97,11 @@ def _merge_partials(left: dict, right: dict) -> dict:
 
     left_warnings = left.get("warnings", [])
     right_warnings = right.get("warnings", [])
-    merged["warnings"] = (left_warnings + right_warnings)[:50]
+    merged["warnings"] = (left_warnings + right_warnings)[:_message_limit()]
 
     left_errors = left.get("errors", [])
     right_errors = right.get("errors", [])
-    merged["errors"] = (left_errors + right_errors)[:50]
+    merged["errors"] = (left_errors + right_errors)[:_message_limit()]
 
     return merged
 
@@ -169,12 +193,14 @@ def process_file_chunks_udf(file_path: str) -> list[tuple[str, dict]]:
                     partial["warnings"].extend(pd_result.warnings[:3])
 
                     for entity in pd_result.entities:
-                        normalized_value = entity.value.strip().lower()
                         local_start = entity.start_pos or 0
                         global_start = chunk.offset_start + local_start
-                        position_bucket = global_start // 10
                         partial["entity_keys"].add(
-                            (entity.entity_type, normalized_value, position_bucket)
+                            _build_entity_key(
+                                entity.entity_type,
+                                entity.value,
+                                global_start,
+                            )
                         )
 
             loop.run_until_complete(_consume_chunks())
@@ -185,7 +211,7 @@ def process_file_chunks_udf(file_path: str) -> list[tuple[str, dict]]:
             partial["status"] = "empty"
 
         return [(file_path, partial)]
-
+    
     except Exception as e:
         partial = _make_partial(file_path)
         partial["status"] = "critical_error"
@@ -260,5 +286,9 @@ def run_spark_processing(spark: SparkSession, file_paths: list[str]):
     stats["avg_pd_processing_ms"] = round(total_pd_time_ms / max(1, stats["pd_found"]), 2)
 
     logger.info("Spark Job Finished", stats=stats)
-    
     return all_results
+
+
+def _finalize_kv(item: tuple[str, dict]) -> dict:
+    path, partial = item
+    return _finalize_result(path, partial)
