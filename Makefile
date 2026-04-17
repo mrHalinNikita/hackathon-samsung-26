@@ -1,5 +1,5 @@
 .PHONY: infra-up infra-down infra-logs infra-clean infra-restart status \
-        venv install run lint format check
+        venv install run lint format check test
 
 COMPOSE_FILE = docker-compose.infra.yml
 
