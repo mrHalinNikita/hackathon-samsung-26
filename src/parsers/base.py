@@ -94,3 +94,43 @@ class BaseParser(ABC):
 
         with open(filepath, "r", encoding=encoding, errors="replace") as f:
             return f.read()
+        
+    def _iter_text_chunks(
+        self,
+        text: str,
+        chunk_size: int,
+        overlap: int,
+        *,
+        base_offset: int = 0,
+    ) -> Iterator[tuple[str, int, int]]:
+        """
+        Разбивает строку на чанки с overlap.
+
+        Возвращает последовательность кортежей:
+        (chunk_text, global_start_offset, global_end_offset)
+        """
+
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be > 0")
+
+        if overlap < 0:
+            raise ValueError("overlap must be >= 0")
+
+        # overlap должен быть меньше размера чанка, иначе окно не сдвигается.
+        effective_overlap = min(overlap, chunk_size - 1) if chunk_size > 1 else 0
+        step = chunk_size - effective_overlap
+
+        if not text:
+            return
+
+        start = 0
+        text_len = len(text)
+        while start < text_len:
+            end = min(start + chunk_size, text_len)
+            chunk_text = text[start:end]
+            yield chunk_text, base_offset + start, base_offset + end
+
+            if end >= text_len:
+                break
+
+            start += step
