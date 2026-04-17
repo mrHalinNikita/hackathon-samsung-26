@@ -2,6 +2,7 @@ import sys
 import os
 import gc
 import time
+from collections import defaultdict
 from pathlib import Path
 
 os.environ["PYSPARK_PYTHON"] = sys.executable
@@ -10,12 +11,14 @@ os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from pyspark.sql import SparkSession
-from src.utils.ocr_cleaner import clean_ocr_text
 import structlog
+
+from src.detectors.base import DetectionResult, classify_protection_level
 
 logger = structlog.get_logger("spark_worker")
 
 _worker_detector = None
+
 
 def _get_worker_detector():
     global _worker_detector
@@ -27,7 +30,96 @@ def _get_worker_detector():
         logger.debug("EnsembleDetector (Regex + NLP) initialized for worker")
     return _worker_detector
 
-def process_file_udf(file_path: str) -> dict:
+
+def _status_rank(status: str) -> int:
+    ranks = {
+        "success": 0,
+        "empty": 1,
+        "parse_error": 2,
+        "critical_error": 3,
+    }
+    return ranks.get(status, 1)
+
+
+def _make_partial(file_path: str) -> dict:
+    return {
+        "file_hash": None,
+        "status": "success",
+        "chunk_count": 0,
+        "text_length": 0,
+        "pd_processing_ms": 0.0,
+        "entity_keys": set(),
+        "snippet": "",
+        "warnings": [],
+        "errors": [],
+        "path": file_path,
+    }
+
+
+def _merge_partials(left: dict, right: dict) -> dict:
+    merged = _make_partial(left.get("path") or right.get("path"))
+
+    merged["file_hash"] = left.get("file_hash") or right.get("file_hash")
+    merged["status"] = (
+        left["status"]
+        if _status_rank(left.get("status", "empty")) >= _status_rank(right.get("status", "empty"))
+        else right["status"]
+    )
+    merged["chunk_count"] = left.get("chunk_count", 0) + right.get("chunk_count", 0)
+    merged["text_length"] = left.get("text_length", 0) + right.get("text_length", 0)
+    merged["pd_processing_ms"] = left.get("pd_processing_ms", 0.0) + right.get("pd_processing_ms", 0.0)
+    merged["entity_keys"] = set(left.get("entity_keys", set())) | set(right.get("entity_keys", set()))
+    merged["snippet"] = left.get("snippet") or right.get("snippet") or ""
+
+    left_warnings = left.get("warnings", [])
+    right_warnings = right.get("warnings", [])
+    merged["warnings"] = (left_warnings + right_warnings)[:50]
+
+    left_errors = left.get("errors", [])
+    right_errors = right.get("errors", [])
+    merged["errors"] = (left_errors + right_errors)[:50]
+
+    return merged
+
+
+def _finalize_result(file_path: str, partial: dict) -> dict:
+    categories = defaultdict(int)
+    for entity_type, _value, _bucket in partial.get("entity_keys", set()):
+        categories[entity_type] += 1
+
+    detection = DetectionResult(categories=dict(categories))
+    classify_protection_level(detection)
+
+    entity_count = sum(categories.values())
+    result = {
+        "status": partial.get("status", "empty"),
+        "path": file_path,
+        "file_hash": partial.get("file_hash"),
+        "has_pd": detection.has_sensitive_data,
+        "protection_level": detection.protection_level,
+        "protection_level_reason": detection.protection_level_reason,
+        "pd_categories": dict(categories),
+        "pd_entity_count": entity_count,
+        "pd_processing_ms": round(partial.get("pd_processing_ms", 0.0), 2),
+        "text_length": partial.get("text_length", 0),
+        "snippet": partial.get("snippet", ""),
+        "chunk_count": partial.get("chunk_count", 0),
+        "warnings": partial.get("warnings", []),
+        "errors": partial.get("errors", []),
+    }
+
+    # Если chunk-ов не было совсем, считаем файл пустым.
+    if partial.get("chunk_count", 0) == 0 and result["status"] == "success":
+        result["status"] = "empty"
+
+    return result
+
+
+def process_file_chunks_udf(file_path: str) -> list[tuple[str, dict]]:
+    """
+    Обрабатывает файл в режиме chunk-стрима и возвращает partial-данные
+    для последующей reduceByKey-агрегации по file_path.
+    """
 
     from src.parsers import ParserFactory
     import asyncio
@@ -35,69 +127,78 @@ def process_file_udf(file_path: str) -> dict:
     try:
         path_obj = Path(file_path)
         if not path_obj.exists():
-            return {"status": "error", "path": file_path, "message": "File not found"}
+            partial = _make_partial(file_path)
+            partial["status"] = "parse_error"
+            partial["errors"].append("File not found")
+            return [(file_path, partial)]
 
-        if path_obj.stat().st_size > 100_000_000:
-            return {"status": "skipped_large", "path": file_path, "message": "File too large"}
-
-        parsed_content = None
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                parsed_content = loop.run_until_complete(ParserFactory.parse_file(path_obj))
-            finally:
-                loop.close()
-        except Exception as parse_err:
-            return {"status": "parse_error", "path": file_path, "message": str(parse_err)[:200]}
-
-        if not parsed_content or not parsed_content.text:
-            return {"status": "empty", "path": file_path}
-        
-        #if parsed_content.text:
-        #    logger.debug(f"OCR/Parser text preview for {Path(file_path).name}:", preview=parsed_content.text[:300])
-            
-        #if path_obj.suffix.lower() in ['.jpg', '.jpeg', '.png', '.tiff', '.bmp', '.gif']:
-        #    original_text = parsed_content.text
-        #    cleaned_text = clean_ocr_text(original_text)
-        #    
-        #    logger.debug(f"OCR cleaned: {original_text[:100]}... -> {cleaned_text[:100]}...")
-            
-        #    parsed_content.text = cleaned_text
+        # Грубая отсечка на экстремально большие файлы.
+        if path_obj.stat().st_size > 500_000_000:
+            partial = _make_partial(file_path)
+            partial["status"] = "parse_error"
+            partial["errors"].append("File too large for current worker limits")
+            return [(file_path, partial)]
 
         detector = _get_worker_detector()
-        pd_result = detector.detect(parsed_content.text)
+        partial = _make_partial(file_path)
+        emitted_any = False
 
-        result = {
-            "status": "success",
-            "path": file_path,
-            "has_pd": pd_result.has_sensitive_data,
-            "protection_level": pd_result.protection_level,
-            "protection_level_reason": pd_result.protection_level_reason,
-            "pd_categories": pd_result.categories,
-            "pd_entity_count": pd_result.entity_count,
-            "pd_processing_ms": pd_result.processing_time_ms,
-            "text_length": len(parsed_content.text),
-            "snippet": parsed_content.text[:300],
-        }
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            async def _consume_chunks():
+                nonlocal emitted_any, partial
 
-        del parsed_content, pd_result, detector
-        gc.collect()
-        return result
+                async for chunk in ParserFactory.parse_file_chunks(path_obj):
+                    emitted_any = True
+                    partial["chunk_count"] += 1
+                    partial["file_hash"] = partial.get("file_hash") or chunk.file_hash
+                    partial["text_length"] += chunk.char_count
 
-    except TimeoutError as e:
-        return {"status": "timeout", "path": file_path, "error": str(e)}
+                    if chunk.errors:
+                        partial["warnings"].extend(chunk.errors[:3])
+
+                    if not chunk.text.strip():
+                        continue
+
+                    if not partial["snippet"]:
+                        partial["snippet"] = chunk.text[:300]
+
+                    pd_result = detector.detect(chunk.text)
+                    partial["pd_processing_ms"] += pd_result.processing_time_ms
+                    partial["warnings"].extend(pd_result.warnings[:3])
+
+                    for entity in pd_result.entities:
+                        normalized_value = entity.value.strip().lower()
+                        local_start = entity.start_pos or 0
+                        global_start = chunk.offset_start + local_start
+                        position_bucket = global_start // 10
+                        partial["entity_keys"].add(
+                            (entity.entity_type, normalized_value, position_bucket)
+                        )
+
+            loop.run_until_complete(_consume_chunks())
+        finally:
+            loop.close()
+
+        if not emitted_any:
+            partial["status"] = "empty"
+
+        return [(file_path, partial)]
+
     except Exception as e:
-        return {"status": "critical_error", "path": file_path, "error": str(e)[:200]}
+        partial = _make_partial(file_path)
+        partial["status"] = "critical_error"
+        partial["errors"].append(str(e)[:200])
+        return [(file_path, partial)]
 
 
 def run_spark_processing(spark: SparkSession, file_paths: list[str]):
-
     spark.sparkContext.setLogLevel("WARN")
     logger.info("Starting Spark Processing Job", files_count=len(file_paths))
 
-    BATCH_SIZE = 3
-    MAX_PARALLEL = 2
+    BATCH_SIZE = 8
+    MAX_PARALLEL = 4
 
     all_results = []
     total_batches = (len(file_paths) + BATCH_SIZE - 1) // BATCH_SIZE
@@ -107,27 +208,27 @@ def run_spark_processing(spark: SparkSession, file_paths: list[str]):
         end_idx = min(start_idx + BATCH_SIZE, len(file_paths))
         batch = file_paths[start_idx:end_idx]
 
-        heavy = [f for f in batch if Path(f).stat().st_size > 50_000_000]
-        if heavy:
-            for hf in heavy:
-                all_results.append({"status": "skipped_heavy", "path": hf})
-            batch = [f for f in batch if f not in heavy]
-            if not batch:
-                continue
-
         logger.info(f"Processing batch {batch_idx + 1}/{total_batches}", batch_size=len(batch))
 
         rdd = spark.sparkContext.parallelize(batch, numSlices=min(MAX_PARALLEL, len(batch)))
-        batch_results = rdd.map(process_file_udf).collect()
-        rdd.unpersist(blocking=True)
+        partials_rdd = rdd.flatMap(process_file_chunks_udf)
+        aggregated_rdd = partials_rdd.reduceByKey(_merge_partials)
+        batch_results = aggregated_rdd.map(lambda kv: _finalize_result(kv[0], kv[1])).collect()
 
         all_results.extend(batch_results)
 
+        rdd.unpersist(blocking=True)
         gc.collect()
-        time.sleep(0.5)
+        time.sleep(0.2)
 
     stats = {
-        "success": 0, "parse_error": 0, "pd_found": 0, "critical_error": 0, "empty": 0, "error": 0, "skipped": 0
+        "success": 0,
+        "parse_error": 0,
+        "pd_found": 0,
+        "critical_error": 0,
+        "empty": 0,
+        "error": 0,
+        "skipped": 0,
     }
     total_entities = 0
     total_pd_time_ms = 0.0
@@ -151,11 +252,13 @@ def run_spark_processing(spark: SparkSession, file_paths: list[str]):
                 protection_reason=res.get("protection_level_reason"),
                 categories=res["pd_categories"],
                 entities=res.get("pd_entity_count", 0),
-                pd_time_ms=res.get("pd_processing_ms", 0)
+                pd_time_ms=res.get("pd_processing_ms", 0),
+                chunks=res.get("chunk_count", 0),
             )
 
     stats["total_entities_found"] = total_entities
     stats["avg_pd_processing_ms"] = round(total_pd_time_ms / max(1, stats["pd_found"]), 2)
 
     logger.info("Spark Job Finished", stats=stats)
+    
     return all_results
