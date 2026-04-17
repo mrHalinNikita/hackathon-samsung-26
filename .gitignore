@@ -15,3 +15,7 @@ deploy/k8s/base/*/secret.yaml
 
 # result
 reports/
+
+# frontend
+src/frontend/node_modules
+src/frontend/.env

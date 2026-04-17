@@ -1,0 +1,25 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/docker/frontend/Dockerfile.dev
+    container_name: pd_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - VITE_API_URL=http://health-api:8002
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./src/frontend:/app
+      - /app/node_modules
+    depends_on:
+      health-api:
+        condition: service_healthy
+    networks:
+      - pd_network
+
+networks:
+  pd_network:
+    external: true
+    name: pd_network

@@ -1,0 +1,43 @@
+services:
+  health-api:
+    build:
+      context: .
+      dockerfile: deploy/docker/health-api/Dockerfile
+    container_name: pd_health_api
+    restart: unless-stopped
+    ports:
+      - "${HEALTH_API_PORT:-8002}:8002"
+    env_file: .env
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - KAFKA_BROKER=${KAFKA_BROKER:-kafka}
+      - KAFKA_PORT=${KAFKA_PORT:-9092}
+      - SPARK_MASTER_HOST=${SPARK_MASTER_HOST:-spark-master}
+      - OCR_HOST=${OCR_HOST:-ocr-service}
+      - OCR_PORT=${OCR_PORT:-8000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+      ocr-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - pd_network
+
+networks:
+  pd_network:
+    external: true
+    name: pd_network

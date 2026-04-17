@@ -40,6 +40,7 @@ install: venv
 	.venv/bin/pip install --upgrade pip
 	.venv/bin/pip install -r requirements.txt
 	.venv/bin/pip install -r requirements-ocr.txt
+	.venv/bin/pip install -r requirements-api.txt
 
 # RUN
 
@@ -147,3 +148,51 @@ k8s-redeploy: k8s-build k8s-apply-app k8s-restart-app
 k8s-test-db:
 	kubectl exec -n $(K8S_NAMESPACE) -l app=pd-app -- python -c \
 	"import os,psycopg2;c=psycopg2.connect(host=os.environ['POSTGRES_HOST'],port=int(os.environ['POSTGRES_PORT']),database=os.environ['POSTGRES_DB'],user=os.environ['POSTGRES_USER'],password=os.environ['POSTGRES_PASSWORD']);print('Connected');c.close()"
+
+# HEALTH API
+
+api-up:
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml up -d health-api
+
+api-down:
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml down health-api
+
+api-logs:
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml logs -f health-api
+
+api-rebuild:
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml build --no-cache health-api
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml up -d health-api
+
+api-check:
+	@curl -s http://localhost:$(HEALTH_API_PORT:-8002)/api/v1/health | jq .
+
+api-dev:
+	.venv/bin/python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8002 --reload
+
+# FRONTEND
+
+frontend-up:
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml -f docker-compose.frontend.yml up -d frontend
+
+frontend-down:
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml -f docker-compose.frontend.yml down frontend
+
+frontend-logs:
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml -f docker-compose.frontend.yml logs -f frontend
+
+frontend-rebuild:
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml -f docker-compose.frontend.yml build --no-cache frontend
+	docker compose -f docker-compose.infra.yml -f docker-compose.health.yml -f docker-compose.frontend.yml up -d frontend
+
+frontend-dev:
+	cd src/frontend && npm install && npm run dev
+
+frontend-typecheck:
+	cd src/frontend && npm run typecheck
+
+frontend-lint:
+	cd src/frontend && npm run lint
+
+frontend-build:
+	cd src/frontend && npm run build
