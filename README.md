@@ -11,6 +11,47 @@
 - ⚡ Распределённая обработка через Apache Spark (локально или в Kubernetes)
 - 🔤 Распознавание текста на изображениях через OCR-микросервис (Tesseract)
 - 🇷🇺 Детекция ПДн РФ: паспорт, СНИЛС, ИНН, телефон, email (regex + эвристики + NLP)
+- 📊 **Классификация уровней защищённости** (УЗ-1 — УЗ-4) согласно 152-ФЗ
+- 📈 **Health API** для мониторинга состояния инфраструктуры (порт 8002)
+- 🖥️ **Web-дашборд** (React + MUI) для визуализации статуса сервисов
+- 📄 **Генерация CSV-отчётов** по результатам сканирования
+
+## 📊 Классификация уровней защищённости
+
+Система автоматически определяет требуемый уровень защищённости (УЗ) на основе обнаруженных категорий ПДн:
+
+| Уровень | Описание | Примеры |
+|---------|----------|---------|
+| **УЗ-1** | Специальные категории ПДн или биометрические данные (высокий риск) | Отпечатки пальцев, данные о здоровье, религиозные убеждения |
+| **УЗ-2** | Платёжная информация или государственные идентификаторы в больших объёмах | >100 паспортов/СНИЛС/ИНН, банковские карты |
+| **УЗ-3** | Гос.идентификаторы в небольших объёмах ИЛИ обычные ПДн в больших объёмах | <100 паспортов, >100 email/телефонов |
+| **УЗ-4** | Только обычные ПДн в небольших объёмах (базовый уровень) | <10 email/телефонов/имён |
+
+Классификация применяется автоматически к каждому файлу и отображается в результатах сканирования и CSV-отчётах.
+
+## 📄 Генерация CSV-отчётов
+
+После сканирования система автоматически генерирует CSV-отчёт с результатами.
+
+### Формат отчёта
+
+```csv
+path,categories_pd,count,uz_level,file_format
+/home/user/docs/passport.pdf,"passport, inn",3,УЗ-3,PDF
+/home/user/docs/contract.docx,"person_name, email",2,УЗ-4,DOCX
+```
+
+### Колонки отчёта
+
+| Колонка | Описание |
+|---------|----------|
+| `path` | Полный путь к файлу |
+| `categories_pd` | Обнаруженные категории ПДн (через запятую) |
+| `count` | Общее количество найденных сущностей |
+| `uz_level` | Уровень защищённости (УЗ-1 — УЗ-4) |
+| `file_format` | Формат файла (PDF, DOCX, JPG и т.д.) |
+
+> 💡 Отчёт сохраняется в директорию, указанную в `REPORT_OUTPUT_PATH` (по умолчанию `./reports/scan_report.csv`)
 
 ## Требования
 
@@ -30,8 +71,11 @@
 |-----------|--------|-----------|
 | **kind** | 0.20+ | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) |
 | **kubectl** | 1.28+ | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
+| **Node.js** | 20+ | [nodejs.org](https://nodejs.org/) (для Frontend) |
 | **ОЗУ** | 8+ ГБ | Рекомендуется 16 ГБ для комфортной работы |
 | **Диск** | ~10 ГБ | Для образов + тестовый датасет |
+
+---
 
 ## 🐳 Локальный запуск (Docker Compose)
 
@@ -70,11 +114,34 @@ make run
 3. Сканирует `SCAN_ROOT_PATH` (по умолчанию `./test_dataset`)
 4. Отправляет задачи в Kafka / Spark
 5. Выводит результаты детекции ПДн в логи
+6. Генерирует CSV-отчёт
 
 > 💡 Для повторного сканирования тех же файлов очистите Redis:
 > ```bash
 > docker exec -it pd_redis redis-cli -a "$(grep REDIS_PASSWORD .env | cut -d= -f2)" FLUSHDB
 > ```
+
+### 5. Запуск Health API
+```bash
+make api-up
+
+# Проверка статуса
+curl http://localhost:8002/api/v1/health | jq .
+
+# Swagger UI
+# Откройте: http://localhost:8002/docs
+```
+
+### 6. Запуск Frontend Dashboard
+```bash
+# Локально (требуется Node.js)
+make frontend-dev
+
+# Или через Docker
+make frontend-up
+
+# Откройте: http://localhost:3000
+```
 
 ---
 
@@ -175,6 +242,9 @@ make k8s-test-db
 # 3. Откройте Spark UI в браузере (в отдельном терминале)
 make k8s-spark-ui
 # Перейдите по ссылке: http://localhost:8080
+
+# 4. Проверьте Health API
+curl http://localhost:8002/api/v1/health | jq .
 ```
 
 ### 🔄 Шаг 7: Запуск распределённого сканирования
@@ -189,6 +259,19 @@ make k8s-job-logs
 # Проверьте статус выполнения
 make k8s-jobs
 # Ожидаем: pd-spark-scan-job  1/1  Completed
+```
+
+### 📊 Шаг 8: Просмотр результатов
+
+```bash
+# CSV-отчёт будет сгенерирован в указанной директории
+# По умолчанию: ./reports/scan_report.csv
+
+# Посмотреть отчёт
+cat ./reports/scan_report.csv
+
+# Или открыть в таблице
+libreoffice --calc ./reports/scan_report.csv
 ```
 
 ### ♻️ Быстрое обновление приложения после изменений в коде
@@ -215,6 +298,8 @@ make k8s-clean
 # Удалить весь кластер kind
 kind delete cluster --name pd-scanner
 ```
+
+---
 
 ## 🔧 Генерация секретов
 
@@ -246,6 +331,26 @@ make k8s-restart-app
 | `make status` | Статус запущенных сервисов |
 | `make ocr-up` | Запуск только OCR-сервиса |
 | `make ocr-logs` | Логи OCR-сервиса |
+
+### 🔹 Health API
+
+| Команда | Описание |
+|---------|----------|
+| `make api-up` | Запуск Health API |
+| `make api-down` | Остановка Health API |
+| `make api-logs` | Логи Health API |
+| `make api-check` | Проверка статуса всех сервисов через API |
+| `make api-dev` | Локальный запуск Health API (без Docker) |
+
+### 🔹 Frontend Dashboard
+
+| Команда | Описание |
+|---------|----------|
+| `make frontend-up` | Запуск Frontend Dashboard (Docker) |
+| `make frontend-down` | Остановка Frontend Dashboard |
+| `make frontend-logs` | Логи Frontend Dashboard |
+| `make frontend-dev` | Локальный запуск Frontend (npm) |
+| `make frontend-build` | Сборка Frontend для продакшена |
 
 ### 🔹 Разработка (Python)
 
@@ -303,7 +408,12 @@ kubectl top pods -n pd-scanner
 
 # Проверка событий в namespace
 kubectl get events -n pd-scanner --sort-by='.lastTimestamp'
+
+# Проверка Health API из контейнера
+docker exec pd_frontend curl -v http://health-api:8002/api/v1/health
 ```
+
+---
 
 ### 🧪 Тестирование
 
@@ -319,4 +429,11 @@ make run
 
 # Проверка в Kubernetes
 make k8s-deploy && make k8s-run-job && make k8s-job-logs
+
+# Проверка Health API
+make api-up && make api-check
+
+# Проверка Frontend
+make frontend-up
+# Откройте: http://localhost:3000
 ```
