@@ -12,6 +12,13 @@ class DetectionConfig(BaseModel):
     NLP_ENABLED: bool = True
     NLP_MIN_CONFIDENCE: float = 0.6
     NLP_ENTITY_TYPES: list[str] = ["PER", "ORG", "LOC", "DATE"]
+    NLP_RUN_MODE: Literal["always", "suspicious_only"] = "suspicious_only"
+    NLP_PREFILTER_MIN_REGEX_ENTITIES: int = 1
+    NLP_PREFILTER_MIN_TEXT_LENGTH: int = 120
+    NLP_PREFILTER_KEYWORDS: list[str] = [
+        "фио", "паспорт", "снилс", "инн", "телефон", "email",
+        "контакт", "договор", "клиент", "персональные данные",
+    ]
     
     # Fuzzy
     FUZZY_ENABLED: bool = True

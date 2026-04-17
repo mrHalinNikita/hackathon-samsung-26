@@ -58,6 +58,9 @@ format:
 check: lint
 	.venv/bin/mypy src/
 
+test:
+	.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -t .
+
 # OCR SERVICE
 
 ocr-up:

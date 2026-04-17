@@ -26,18 +26,28 @@ class EnsembleDetector(BaseDetector):
             return DetectionResult()
         
         all_entities = []
-        all_categories = defaultdict(int)
         all_warnings = []
         
-        for name, detector in self._detectors.items():
+        regex_result = None
+        if "regex" in self._detectors:
             try:
-                result = detector.detect(text)
-                all_entities.extend(result.entities)
-                for cat, count in result.categories.items():
-                    all_categories[cat] += count
-                all_warnings.extend(result.warnings)
+                regex_result = self._detectors["regex"].detect(text)
+                all_entities.extend(regex_result.entities)
+                all_warnings.extend(regex_result.warnings)
             except Exception as e:
-                all_warnings.append(f"{name} detector failed: {e}")
+                all_warnings.append(f"regex detector failed: {e}")
+
+        if "nlp" in self._detectors:
+            should_run_nlp = self._should_run_nlp(text, regex_result)
+            if should_run_nlp:
+                try:
+                    nlp_result = self._detectors["nlp"].detect(text)
+                    all_entities.extend(nlp_result.entities)
+                    all_warnings.extend(nlp_result.warnings)
+                except Exception as e:
+                    all_warnings.append(f"nlp detector failed: {e}")
+            else:
+                all_warnings.append("nlp skipped by suspicious prefilter")
         
         merged = self._merge_entities(all_entities)
         
@@ -62,6 +72,24 @@ class EnsembleDetector(BaseDetector):
         classify_protection_level(result)
     
         return result
+    
+    def _should_run_nlp(self, text: str, regex_result: DetectionResult | None) -> bool:
+        """
+        Снижает нагрузку: запускаем NLP только на "подозрительных" чанках.
+        """
+
+        if self.config.NLP_RUN_MODE == "always":
+            return True
+
+        regex_hits = len(regex_result.entities) if regex_result else 0
+        if regex_hits >= self.config.NLP_PREFILTER_MIN_REGEX_ENTITIES:
+            return True
+
+        if len(text) < self.config.NLP_PREFILTER_MIN_TEXT_LENGTH:
+            return False
+
+        lowered = text.lower()
+        return any(keyword in lowered for keyword in self.config.NLP_PREFILTER_KEYWORDS)
     
     def _merge_entities(self, entities: list[PDEntity]) -> list[PDEntity]:
 
