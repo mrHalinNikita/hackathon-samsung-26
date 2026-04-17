@@ -437,3 +437,22 @@ make api-up && make api-check
 make frontend-up
 # Откройте: http://localhost:3000
 ```
+
+#### Локальные unit-тесты chunk-пайплайна
+
+```bash
+# Рекомендуемый запуск (через Makefile)
+make test
+
+# Эквивалентная команда напрямую (совместима с Python 3.14+)
+python -m unittest discover -s tests -p 'test_*.py' -t .
+
+# Точечный запуск по модулям
+python -m unittest tests.test_chunk_parsing
+python -m unittest tests.test_spark_dedup
+```
+
+Покрываются базовые сценарии:
+- fallback-режим `parse_chunks` и overlap-нарезка `_iter_text_chunks`;
+- дедупликация сущностей в Spark-агрегаторе на overlap-чанках;
+- финальная агрегация категорий/количества сущностей на уровне файла.
