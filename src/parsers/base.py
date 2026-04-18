@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, Iterator
 
 
 @dataclass
@@ -85,7 +85,7 @@ class BaseParser(ABC):
             metadata=metadata,
             errors=list(parsed.errors or []),
         )
-        
+
     def _read_file_bytes(self, filepath: Path) -> bytes:
 
         with open(filepath, "rb") as f:
