@@ -1,5 +1,5 @@
 .PHONY: infra-up infra-down infra-logs infra-clean infra-restart status \
-        venv install run lint format check
+        venv install run lint format check test
 
 COMPOSE_FILE = docker-compose.infra.yml
 
@@ -57,6 +57,9 @@ format:
 
 check: lint
 	.venv/bin/mypy src/
+
+test:
+	.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -t .
 
 # OCR SERVICE
 

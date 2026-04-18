@@ -58,6 +58,11 @@ class Settings(BaseSettings):
         ".txt", ".pdf", ".docx", ".xlsx", ".csv", ".json", ".html",
         ".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".tmp"
     ]
+    CHUNK_SIZE_CHARS: int = 12000
+    CHUNK_OVERLAP_CHARS: int = 500
+    CHUNK_DETECT_ENCODING_SAMPLE_BYTES: int = 65536
+    CHUNK_ENTITY_DEDUP_WINDOW_CHARS: int = 25
+    CHUNK_MAX_MESSAGES_PER_FILE: int = 100
 
     # OCR SERVICE
     OCR_HOST: str
@@ -67,6 +72,8 @@ class Settings(BaseSettings):
 
     # RESULT
     REPORT_OUTPUT_PATH: str
+    REPORT_JSON_OUTPUT_PATH: str = ""
+    REPORT_FINDINGS_ONLY: bool = True
 
 
 settings = Settings()

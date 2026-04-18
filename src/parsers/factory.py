@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import Type
+from typing import AsyncIterator, Type
 import structlog
 
-from src.parsers.base import BaseParser, ParsedContent
+from src.parsers.base import BaseParser, ParsedChunk, ParsedContent
 from src.parsers.txt_parser import TxtParser
 from src.parsers.csv_parser import CsvParser
 from src.parsers.json_parser import JsonParser
@@ -64,3 +64,31 @@ class ParserFactory:
         except Exception as e:
             logger.error("Error parsing file", path=str(filepath), error=str(e), error_type=type(e).__name__,)
             return ParsedContent(text="", metadata={"path": str(filepath)},errors=[f"{type(e).__name__}: {e}"],)
+
+    @classmethod
+    async def parse_file_chunks(
+        cls,
+        filepath: Path,
+        file_hash: str | None = None,
+    ) -> AsyncIterator[ParsedChunk]:
+        """
+        Единая точка входа для chunk-обработки.
+        На Этапе 2 некоторые парсеры уже отдают настоящие чанки,
+        остальные продолжают работать через fallback из BaseParser.
+        """
+
+        parser = cls.get_parser(filepath)
+        if not parser:
+            return
+
+        try:
+            async for chunk in parser.parse_chunks(filepath, file_hash=file_hash):
+                yield chunk
+        except Exception as e:
+            logger.error(
+                "Error parsing file into chunks",
+                path=str(filepath),
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            return

@@ -53,6 +53,7 @@ class DetectionResult:
     categories: dict[str, int] = field(default_factory=dict)
     processing_time_ms: float = 0.0
     warnings: list[str] = field(default_factory=list)
+    document_assessment: Optional[dict] = None
     
     protection_level: Optional[str] = None
     protection_level_reason: Optional[str] = None

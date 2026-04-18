@@ -4,6 +4,9 @@ from typing import Literal
 
 class DetectionConfig(BaseModel):
     
+    # Rule engine
+    RULE_ENGINE_ENABLED: bool = True
+    
     # Regex
     REGEX_ENABLED: bool = True
     REGEX_MIN_CONFIDENCE: float = 0.5
@@ -12,6 +15,13 @@ class DetectionConfig(BaseModel):
     NLP_ENABLED: bool = True
     NLP_MIN_CONFIDENCE: float = 0.6
     NLP_ENTITY_TYPES: list[str] = ["PER", "ORG", "LOC", "DATE"]
+    NLP_RUN_MODE: Literal["always", "suspicious_only"] = "suspicious_only"
+    NLP_PREFILTER_MIN_REGEX_ENTITIES: int = 1
+    NLP_PREFILTER_MIN_TEXT_LENGTH: int = 120
+    NLP_PREFILTER_KEYWORDS: list[str] = [
+        "фио", "дата рождения", "паспорт", "снилс", "инн", "адрес", "тел", "email",
+        "пациент", "диагноз", "биометр", "face", "voiceprint",
+    ]
     
     # Fuzzy
     FUZZY_ENABLED: bool = True
