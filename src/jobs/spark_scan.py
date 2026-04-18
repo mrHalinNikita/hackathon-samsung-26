@@ -10,6 +10,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.spark.job import run_spark_processing
 from src.scanner.file_walker import walk_directory
 from src.utils.csv_report import save_csv_report
+from src.utils.json_report import save_json_report
 
 logger = structlog.get_logger("spark_scan_job")
 
@@ -52,7 +53,11 @@ def main():
         results = run_spark_processing(spark, files)
 
         report_path = os.getenv('REPORT_OUTPUT_PATH', '/app/reports/scan_report.csv')
-        save_csv_report(results, report_path)
+        findings_only = os.getenv("REPORT_FINDINGS_ONLY", "true").lower() == "true"
+        save_csv_report(results, report_path, findings_only=findings_only)
+        json_report_path = os.getenv("REPORT_JSON_OUTPUT_PATH", "")
+        if json_report_path:
+            save_json_report(results, json_report_path, findings_only=findings_only)
 
         success = sum(1 for r in results if r.get("status") == "success")
         pd_found = sum(1 for r in results if r.get("has_pd"))

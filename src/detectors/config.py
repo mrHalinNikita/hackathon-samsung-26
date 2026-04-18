@@ -4,6 +4,9 @@ from typing import Literal
 
 class DetectionConfig(BaseModel):
     
+    # Rule engine
+    RULE_ENGINE_ENABLED: bool = True
+    
     # Regex
     REGEX_ENABLED: bool = True
     REGEX_MIN_CONFIDENCE: float = 0.5
@@ -16,8 +19,8 @@ class DetectionConfig(BaseModel):
     NLP_PREFILTER_MIN_REGEX_ENTITIES: int = 1
     NLP_PREFILTER_MIN_TEXT_LENGTH: int = 120
     NLP_PREFILTER_KEYWORDS: list[str] = [
-        "фио", "паспорт", "снилс", "инн", "телефон", "email",
-        "контакт", "договор", "клиент", "персональные данные",
+        "фио", "дата рождения", "паспорт", "снилс", "инн", "адрес", "тел", "email",
+        "пациент", "диагноз", "биометр", "face", "voiceprint",
     ]
     
     # Fuzzy

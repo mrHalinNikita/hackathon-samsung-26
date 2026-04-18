@@ -50,6 +50,13 @@ def _make_partial(file_path: str) -> dict:
         "text_length": 0,
         "pd_processing_ms": 0.0,
         "entity_keys": set(),
+        "legal_buckets": set(),
+        "detected_categories": set(),
+        "overall_risk_score": 0,
+        "overall_confidence": "no_pd_or_weak",
+        "strongest_category": None,
+        "short_reason": "",
+        "long_reason": "",
         "snippet": "",
         "warnings": [],
         "errors": [],
@@ -93,6 +100,20 @@ def _merge_partials(left: dict, right: dict) -> dict:
     merged["text_length"] = left.get("text_length", 0) + right.get("text_length", 0)
     merged["pd_processing_ms"] = left.get("pd_processing_ms", 0.0) + right.get("pd_processing_ms", 0.0)
     merged["entity_keys"] = set(left.get("entity_keys", set())) | set(right.get("entity_keys", set()))
+    merged["legal_buckets"] = set(left.get("legal_buckets", set())) | set(right.get("legal_buckets", set()))
+    merged["detected_categories"] = set(left.get("detected_categories", set())) | set(right.get("detected_categories", set()))
+    if right.get("overall_risk_score", 0) > left.get("overall_risk_score", 0):
+        merged["overall_risk_score"] = right.get("overall_risk_score", 0)
+        merged["overall_confidence"] = right.get("overall_confidence", "no_pd_or_weak")
+        merged["strongest_category"] = right.get("strongest_category")
+        merged["short_reason"] = right.get("short_reason", "")
+        merged["long_reason"] = right.get("long_reason", "")
+    else:
+        merged["overall_risk_score"] = left.get("overall_risk_score", 0)
+        merged["overall_confidence"] = left.get("overall_confidence", "no_pd_or_weak")
+        merged["strongest_category"] = left.get("strongest_category")
+        merged["short_reason"] = left.get("short_reason", "")
+        merged["long_reason"] = left.get("long_reason", "")
     merged["snippet"] = left.get("snippet") or right.get("snippet") or ""
 
     left_warnings = left.get("warnings", [])
@@ -119,7 +140,7 @@ def _finalize_result(file_path: str, partial: dict) -> dict:
         "status": partial.get("status", "empty"),
         "path": file_path,
         "file_hash": partial.get("file_hash"),
-        "has_pd": detection.has_sensitive_data,
+        "has_pd": detection.has_sensitive_data or partial.get("overall_risk_score", 0) >= 20,
         "protection_level": detection.protection_level,
         "protection_level_reason": detection.protection_level_reason,
         "pd_categories": dict(categories),
@@ -130,6 +151,17 @@ def _finalize_result(file_path: str, partial: dict) -> dict:
         "chunk_count": partial.get("chunk_count", 0),
         "warnings": partial.get("warnings", []),
         "errors": partial.get("errors", []),
+        "document_assessment": {
+            "has_personal_data": detection.has_sensitive_data or partial.get("overall_risk_score", 0) >= 20,
+            "overall_confidence": partial.get("overall_confidence", "no_pd_or_weak"),
+            "overall_risk_score": partial.get("overall_risk_score", 0),
+            "legal_buckets_present": sorted(partial.get("legal_buckets", set())),
+            "detected_categories": sorted(partial.get("detected_categories", set())),
+            "short_reason": partial.get("short_reason", ""),
+            "long_reason": partial.get("long_reason", ""),
+            "hit_count": entity_count,
+            "strongest_category": partial.get("strongest_category"),
+        },
     }
 
     # Если chunk-ов не было совсем, считаем файл пустым.
@@ -191,6 +223,18 @@ def process_file_chunks_udf(file_path: str) -> list[tuple[str, dict]]:
                     pd_result = detector.detect(chunk.text)
                     partial["pd_processing_ms"] += pd_result.processing_time_ms
                     partial["warnings"].extend(pd_result.warnings[:3])
+                    assessment = pd_result.document_assessment or {}
+                    partial["overall_risk_score"] = max(
+                        partial.get("overall_risk_score", 0),
+                        assessment.get("overall_risk_score", 0),
+                    )
+                    if partial["overall_risk_score"] == assessment.get("overall_risk_score", 0):
+                        partial["overall_confidence"] = assessment.get("overall_confidence", "no_pd_or_weak")
+                        partial["strongest_category"] = assessment.get("strongest_category")
+                        partial["short_reason"] = assessment.get("short_reason", "")
+                        partial["long_reason"] = assessment.get("long_reason", "")
+                    partial["legal_buckets"].update(assessment.get("legal_buckets_present", []))
+                    partial["detected_categories"].update(assessment.get("detected_categories", []))
 
                     for entity in pd_result.entities:
                         local_start = entity.start_pos or 0

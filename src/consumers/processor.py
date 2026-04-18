@@ -5,6 +5,7 @@ from typing import Optional
 
 from src.parsers import ParserFactory, ParsedContent
 from src.infrastructure import init_kafka_producer
+from src.detectors import detect_personal_data
 
 logger = structlog.get_logger("processor")
 
@@ -85,14 +86,7 @@ class FileProcessor:
         return result
     
     async def _detect_pd(self, text: str) -> dict:
-
-        # TODO: implement detection while stub
-
-        return {
-            "detected": False,
-            "categories": {},
-            "entities": [],
-        }
+        return detect_personal_data(text)
     
     async def _send_result(self, result: dict) -> None:
 

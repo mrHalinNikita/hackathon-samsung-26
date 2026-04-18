@@ -72,6 +72,8 @@ class Settings(BaseSettings):
 
     # RESULT
     REPORT_OUTPUT_PATH: str
+    REPORT_JSON_OUTPUT_PATH: str = ""
+    REPORT_FINDINGS_ONLY: bool = True
 
 
 settings = Settings()

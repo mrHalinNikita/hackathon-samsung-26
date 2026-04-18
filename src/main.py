@@ -12,6 +12,7 @@ from src.scanner import walk_directory
 from src.services import start_background_scanner
 from src.consumers import RawFilesConsumer
 from src.utils.csv_report import save_csv_report
+from src.utils.json_report import save_json_report
 from src.spark.job import run_spark_processing
 from src.infrastructure import (
     init_database,
@@ -99,6 +100,7 @@ def main() -> int:
         logger.info("Collecting files for Spark processing...")
         
         files_to_process = []
+        results = []
         for file_info in walk_directory(
             root_path=settings.SCAN_ROOT_PATH,
             calculate_hash=True
@@ -117,7 +119,9 @@ def main() -> int:
     except Exception as e:
         logger.error("Error in Spark processing", error=str(e))
 
-    save_csv_report(results, settings.REPORT_OUTPUT_PATH)
+    save_csv_report(results, settings.REPORT_OUTPUT_PATH, findings_only=settings.REPORT_FINDINGS_ONLY)
+    if settings.REPORT_JSON_OUTPUT_PATH:
+        save_json_report(results, settings.REPORT_JSON_OUTPUT_PATH, findings_only=settings.REPORT_FINDINGS_ONLY)
 
     logger.info("The application is ready to work!", message="Waiting for tasks...")
 
