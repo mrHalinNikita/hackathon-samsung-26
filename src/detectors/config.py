@@ -1,56 +1,69 @@
-from pydantic import BaseModel, Field
 from typing import Literal
+
+from pydantic import BaseModel
 
 
 class DetectionConfig(BaseModel):
-    
-    # Rule engine
+    PROFILE: Literal["strict", "balanced"] = "strict"
+
+    # Pipeline toggles
     RULE_ENGINE_ENABLED: bool = True
-    
-    # Regex
-    REGEX_ENABLED: bool = True
-    REGEX_MIN_CONFIDENCE: float = 0.5
-    
-    # NLP
-    NLP_ENABLED: bool = True
-    NLP_MIN_CONFIDENCE: float = 0.6
+    REGEX_ENABLED: bool = False
+    NLP_ENABLED: bool = False
+
+    # Context + aggregation
+    CONTEXT_WINDOW: int = 80
+    LOCAL_SCOPE_WINDOW: int = 260
+    MIN_MEDIUM_PER_SCOPE: int = 2
+
+    # Structured heuristics
+    STRUCTURED_MIN_ROWS: int = 3
+    STRUCTURED_VALIDATOR_PASS_RATE: float = 0.6
+
+    # Volume thresholds for УЗ
+    SMALL_VOLUME_THRESHOLD: int = 10
+    LARGE_VOLUME_THRESHOLD: int = 100
+
+    # Optional compatibility knobs for legacy detectors
+    REGEX_MIN_CONFIDENCE: float = 0.75
+    NLP_MIN_CONFIDENCE: float = 0.7
     NLP_ENTITY_TYPES: list[str] = ["PER", "ORG", "LOC", "DATE"]
     NLP_RUN_MODE: Literal["always", "suspicious_only"] = "suspicious_only"
     NLP_PREFILTER_MIN_REGEX_ENTITIES: int = 1
     NLP_PREFILTER_MIN_TEXT_LENGTH: int = 120
     NLP_PREFILTER_KEYWORDS: list[str] = [
-        "фио", "дата рождения", "паспорт", "снилс", "инн", "адрес", "тел", "email",
-        "пациент", "диагноз", "биометр", "face", "voiceprint",
+        "фио",
+        "дата рождения",
+        "паспорт",
+        "снилс",
+        "инн",
+        "адрес",
+        "тел",
+        "email",
     ]
-    
-    # Fuzzy
-    FUZZY_ENABLED: bool = True
-    FUZZY_THRESHOLD: int = 85
-    FUZZY_CANDIDATES: int = 3
-    
-    # Context 
-    CONTEXT_ENABLED: bool = True
-    CONTEXT_WINDOW: int = 50
-    CONTEXT_PENALTY: float = 0.2
-    
-    # Ensemble
-    ENSEMBLE_STRATEGY: Literal["max", "weighted", "voting"] = "weighted"
-    ENSEMBLE_WEIGHTS: dict[str, float] = {
-        "regex": 0.5,
-        "nlp": 0.3,
-        "fuzzy": 0.2,
-    }
-    FINAL_MIN_CONFIDENCE: float = 0.5
-    
-    MAX_ENTITIES_PER_TYPE: int = 100
     MAX_TEXT_LENGTH_FOR_NLP: int = 50000
+    ENSEMBLE_STRATEGY: Literal["max", "weighted", "voting"] = "max"
+    ENSEMBLE_WEIGHTS: dict[str, float] = {"regex": 0.5, "nlp": 0.3, "rule": 0.2}
+    FINAL_MIN_CONFIDENCE: float = 0.5
+
+    # Reporting limits
+    MAX_ENTITIES_PER_TYPE: int = 100
+
+    # Diagnostics
+    DIAGNOSTIC_MODE: bool = False
 
 
-default_config = DetectionConfig()
+STRICT_CONFIG = DetectionConfig()
+BALANCED_CONFIG = DetectionConfig(
+    PROFILE="balanced",
+    REGEX_ENABLED=False,
+    NLP_ENABLED=False,
+    MIN_MEDIUM_PER_SCOPE=2,
+    STRUCTURED_VALIDATOR_PASS_RATE=0.5,
+)
 
+default_config = STRICT_CONFIG
 
-SMALL_VOLUME_THRESHOLD = 10
-LARGE_VOLUME_THRESHOLD = 100
 
 BIOMETRIC_CATEGORIES = {"fingerprint", "iris", "voice_sample", "face_geometry", "dna"}
 

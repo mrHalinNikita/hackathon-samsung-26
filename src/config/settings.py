@@ -55,8 +55,9 @@ class Settings(BaseSettings):
     SCAN_ROOT_PATH: str
     SCAN_MAX_FILE_SIZE_MB: int
     SCAN_SUPPORTED_EXTENSIONS: list[str] = [
-        ".txt", ".pdf", ".docx", ".xlsx", ".csv", ".json", ".html",
-        ".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".tmp"
+        ".txt", ".log", ".md", ".pdf", ".doc", ".docx", ".rtf", ".xlsx", ".xlsm",
+        ".csv", ".json", ".parquet", ".html", ".htm", ".mp4",
+        ".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".gif", ".tmp"
     ]
     CHUNK_SIZE_CHARS: int = 12000
     CHUNK_OVERLAP_CHARS: int = 500

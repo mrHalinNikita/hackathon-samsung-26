@@ -44,9 +44,10 @@ def test_csv_report_full_inventory_mode(tmp_path: Path):
     output = save_csv_report(results, str(tmp_path / "report.csv"), findings_only=False)
     body = Path(output).read_text(encoding="utf-8")
 
-    assert "file_path" in body
+    assert "путь,категории_пДн,количество_находок,УЗ,формат_файла,причина" in body
     assert "/tmp/a.txt" in body
     assert "/tmp/b.txt" in body
+    assert "full_name=1" in body
 
 
 def test_csv_report_findings_only(tmp_path: Path):
