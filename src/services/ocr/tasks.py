@@ -4,7 +4,6 @@ import time
 
 from src.services.ocr.config import settings
 from src.services.ocr.ocr_engine import ocr_engine
-from src.services.ocr.schemas import OCRResponse
 from src.services.ocr.logger import get_logger
 
 logger = get_logger("ocr_tasks")
@@ -28,25 +27,61 @@ celery_app.conf.update(
 
 
 @celery_app.task(bind=True, name="ocr.process_image")
-def process_image_task(self, file_path: str, language: str | None = None, preprocess: bool = True,) -> dict:
+def process_image_task(
+    self,
+    file_path: str,
+    language: str | None = None,
+    preprocess: bool = True,
+    psm: int | None = None,
+    oem: int | None = None,
+    return_words: bool = False,
+) -> dict:
 
     start_time = time.time()
     
-    logger.info("Starting OCR task", task_id=self.request.id, file_path=file_path,language=language,)
+    logger.info(
+        "Starting OCR task",
+        task_id=self.request.id,
+        file_path=file_path,
+        language=language,
+        preprocess=preprocess,
+        psm=psm,
+        oem=oem,
+    )
     
     try:
         result = ocr_engine.extract_text(
             image_path=Path(file_path),
             language=language,
             preprocess=preprocess,
+            psm=psm,
+            oem=oem,
+            return_words=return_words,
         )
         
         processing_time = (time.time() - start_time) * 1000
         
-        logger.info("OCR task completed", task_id=self.request.id, confidence=result["confidence"], processing_time_ms=processing_time,)
+        logger.info(
+            "OCR task completed",
+            task_id=self.request.id,
+            confidence=result["confidence"],
+            processing_time_ms=processing_time,
+            blocks_found=result["metadata"]["blocks_found"],
+        )
         
-        return {**result, "processing_time_ms": round(processing_time, 2), "task_id": self.request.id,}
+        return {
+            **result,
+            "processing_time_ms": round(processing_time, 2),
+            "task_id": self.request.id,
+            "status": "completed",
+        }
         
     except Exception as e:
-        logger.error("OCR task failed", task_id=self.request.id, error=str(e), error_type=type(e).__name__,)
+        logger.error(
+            "OCR task failed",
+            task_id=self.request.id,
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
         raise

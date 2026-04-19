@@ -9,18 +9,11 @@ def save_csv_report(results: list[dict], output_path: str, findings_only: bool =
     with open(output_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([
-            "file_path",
-            "status",
-            "has_personal_data",
-            "overall_confidence",
-            "overall_risk_score",
-            "legal_buckets_present",
-            "detected_categories",
-            "short_reason",
-            "hit_count",
-            "strongest_category",
-            "uz_level",
-            "file_format",
+            "путь",
+            "категории_пДн",
+            "количество_находок",
+            "УЗ",
+            "формат_файла",
         ])
 
         for res in results:
@@ -35,23 +28,20 @@ def save_csv_report(results: list[dict], output_path: str, findings_only: bool =
             if findings_only and not has_pd:
                 continue
             
-            detected_categories = assessment.get("detected_categories")
-            if detected_categories is None:
-                detected_categories = list((res.get("pd_categories") or {}).keys())
+            pd_categories = res.get("pd_categories") or {}
+            if not pd_categories:
+                detected_categories = assessment.get("detected_categories") or []
+                pd_categories = {category: 0 for category in detected_categories}
 
-            legal_buckets = assessment.get("legal_buckets_present", [])
+            detected_categories = sorted(pd_categories.keys())
+            counts_by_category = "; ".join(
+                f"{category}={pd_categories[category]}" for category in detected_categories
+            ) if detected_categories else "0"
 
             writer.writerow([
                 path,
-                res.get("status", "unknown"),
-                has_pd,
-                assessment.get("overall_confidence", "no_pd_or_weak"),
-                assessment.get("overall_risk_score", 0),
-                ", ".join(legal_buckets),
                 ", ".join(detected_categories),
-                assessment.get("short_reason", ""),
-                assessment.get("hit_count", res.get("pd_entity_count", 0)),
-                assessment.get("strongest_category", ""),
+                counts_by_category,
                 res.get("protection_level", "УЗ-4"),
                 file_format,
             ])

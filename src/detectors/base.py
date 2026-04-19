@@ -70,8 +70,18 @@ class DetectionResult:
 
 
 def classify_protection_level(result: DetectionResult) -> DetectionResult:
+    alias_map = {
+        "card_number": "credit_card",
+        "payment_card": "payment_card_number",
+        "bank_card": "payment_card_number",
+        "bankaccount": "bank_account",
+    }
 
-    cats = result.categories
+    cats: dict[str, int] = {}
+    for raw_key, count in result.categories.items():
+        normalized_key = raw_key.strip().lower().replace(" ", "_").replace("-", "_")
+        normalized_key = alias_map.get(normalized_key, normalized_key)
+        cats[normalized_key] = cats.get(normalized_key, 0) + count
     biometric = sum(v for k, v in cats.items() if k in BIOMETRIC_CATEGORIES)
     special = sum(v for k, v in cats.items() if k in SPECIAL_CATEGORIES)
     payment = sum(v for k, v in cats.items() if k in PAYMENT_CATEGORIES)
@@ -82,9 +92,9 @@ def classify_protection_level(result: DetectionResult) -> DetectionResult:
     if biometric > 0 or special > 0:
         result.protection_level = "УЗ-1"
         result.protection_level_reason = "Специальные/биометрические данные (высокий риск)"
-    elif payment >= LARGE_VOLUME_THRESHOLD or gov >= LARGE_VOLUME_THRESHOLD:
+    elif payment > 0 or gov >= LARGE_VOLUME_THRESHOLD:
         result.protection_level = "УЗ-2"
-        result.protection_level_reason = "Платежные/гос. данные в больших объемах"
+        result.protection_level_reason = "Платежные данные или гос. данные в больших объемах"
     elif 0 < gov < LARGE_VOLUME_THRESHOLD or regular >= LARGE_VOLUME_THRESHOLD:
         result.protection_level = "УЗ-3"
         result.protection_level_reason = "Гос. идентификаторы или обычные ПДн"
@@ -93,6 +103,6 @@ def classify_protection_level(result: DetectionResult) -> DetectionResult:
         result.protection_level_reason = "Обычные ПДн в небольших объемах"
     else:
         result.protection_level = "УЗ-0"
-        result.protection_level_reason = "ПДн не обнаружены"
+        result.protection_level_reason = "ПДн не обнаружены (базовый уровень)"
         
     return result
