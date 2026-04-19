@@ -14,6 +14,7 @@ def save_csv_report(results: list[dict], output_path: str, findings_only: bool =
             "количество_находок",
             "УЗ",
             "формат_файла",
+            "причина",
         ])
 
         for res in results:
@@ -44,6 +45,7 @@ def save_csv_report(results: list[dict], output_path: str, findings_only: bool =
                 counts_by_category,
                 res.get("protection_level", "УЗ-4"),
                 file_format,
+                assessment.get("short_reason", ""),
             ])
 
     return str(output_file)

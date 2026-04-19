@@ -10,6 +10,10 @@ from src.parsers.html_parser import HtmlParser
 from src.parsers.pdf_parser import PdfParser
 from src.parsers.docx_parser import DocxParser
 from src.parsers.xlsx_parser import XlsxParser
+from src.parsers.doc_parser import DocParser
+from src.parsers.rtf_parser import RtfParser
+from src.parsers.parquet_parser import ParquetParser
+from src.parsers.mp4_parser import Mp4Parser
 from src.parsers.image_parser import ImageParser
 
 logger = structlog.get_logger("parser_factory")
@@ -35,7 +39,7 @@ class ParserFactory:
         
         for parser_cls in [
             TxtParser, CsvParser, JsonParser, HtmlParser,
-            PdfParser, DocxParser, XlsxParser, ImageParser,
+            PdfParser, DocxParser, XlsxParser, DocParser, RtfParser, ParquetParser, Mp4Parser, ImageParser,
         ]:
             cls.register(parser_cls)
     
